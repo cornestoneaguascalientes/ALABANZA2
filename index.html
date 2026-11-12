@@ -468,6 +468,16 @@
         </label>
       </div>
       <label class="field">
+        <span>Secuencia (enlace de archive.org)</span>
+        <input id="song-seq" type="text" inputmode="url" autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="https://archive.org/details/bautizados_en_fuego">
+        <small>Pega el enlace del item donde subiste las pistas. Déjalo vacío si la canción no tiene secuencia.</small>
+      </label>
+      <label class="field">
+        <span>Pistas que no se cargan (opcional)</span>
+        <input id="song-seq-skip" type="text" maxlength="500" autocomplete="off" placeholder="EG 4, EG 5, Keys 3">
+        <small>Nombres de archivo sin .mp3, separados por comas. Sirve para no gastar memoria del celular.</small>
+      </label>
+      <label class="field">
         <span>Letra con acordes</span>
         <textarea id="song-lyrics" rows="12" wrap="off" spellcheck="false" placeholder="[Intro]&#10;C   Am   F   G&#10;&#10;[Verso 1]&#10;C        Am     F&#10;Grande es el Señor&#10;G          C     Am&#10;Y muy digno de loar"></textarea>
         <small>Escribe los acordes en una línea arriba de la letra, cada uno justo sobre la sílaba donde cambia. Una línea sola como [Coro] crea un título de sección. Una línea de solo acordes (intro) déjala seguida de un renglón vacío.</small>
