@@ -153,6 +153,16 @@
   // ============================
   // Formulario de canción (crear / editar)
   // ============================
+  /** Acepta un enlace de archive.org (details, download o items) o solo el identificador. '' si no es válido */
+  function parseArchiveItem(text) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    const m = t.match(/archive\.org\/(?:details|download|embed|metadata|compress|stream)\/([A-Za-z0-9][A-Za-z0-9_.\-]*)/i) ||
+              t.match(/\/items\/([A-Za-z0-9][A-Za-z0-9_.\-]*)/);
+    const id = m ? m[1] : t;
+    return /^[A-Za-z0-9][A-Za-z0-9_.\-]{0,99}$/.test(id) ? id : '';
+  }
+
   function openSongDialog(id) {
     const song = id != null ? Database.getSongById(id) : null;
     state.editingId = song ? song.id : null;
@@ -162,25 +172,32 @@
     $('song-bpm').value = song ? song.bpm : 120;
     $('song-ts').innerHTML = tsOptionsHtml(song ? song.timeSig : '4/4');
     $('song-lyrics').value = song ? Music.toChordSheet(song.lyrics) : '';
+    $('song-seq').value = song ? song.sequence : '';
+    $('song-seq-skip').value = song ? song.seqSkip : '';
     $('song-dialog').showModal();
   }
 
   async function submitSong(e) {
     e.preventDefault();
+    const seqText = $('song-seq').value.trim();
+    const sequence = parseArchiveItem(seqText);
+    if (seqText && !sequence) { UI.toast('El enlace de la secuencia no es de archive.org', 'error'); return; }
     const data = {
       title: $('song-title-input').value.trim(),
       originalKey: $('song-key').value,
       bpm: parseInt($('song-bpm').value, 10) || 120,
       timeSig: $('song-ts').value,
-      lyrics: Music.fromChordSheet($('song-lyrics').value)
+      lyrics: Music.fromChordSheet($('song-lyrics').value),
+      sequence,
+      seqSkip: $('song-seq-skip').value.trim()
     };
     const btn = $('save-song');
     btn.disabled = true;
     try {
-      if (state.editingId != null) await Database.updateSong(state.editingId, data);
-      else await Database.addSong(data);
+      const saved = state.editingId != null ? await Database.updateSong(state.editingId, data) : await Database.addSong(data);
       $('song-dialog').close();
-      UI.toast('Canción guardada');
+      if (data.sequence && saved.sequence !== data.sequence) UI.toast('La secuencia no se guardó: falta actualizar Code.gs en Apps Script (Nueva versión)', 'error');
+      else UI.toast('Canción guardada');
       // Si se editó la canción abierta en el visor, refrescarla
       if (state.song && state.song.id === state.editingId) openViewer(state.song.id, null, true);
     } catch (err) {
