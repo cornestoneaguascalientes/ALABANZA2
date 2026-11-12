@@ -1,14 +1,3 @@
 {
-  "_ejemplo_cambia_esta_llave_por_el_ID_de_la_cancion": {
-    "key": "G",
-    "tracks": [
-      { "name": "Click",    "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_click.mp3",   "out": "L" },
-      { "name": "Voz guía", "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_guia.mp3",    "out": "L" },
-      { "name": "Pads",     "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_pads.mp3",    "out": "R" },
-      { "name": "Batería",  "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_bateria.mp3", "out": "R" },
-      { "name": "Bajo",     "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_bajo.mp3",    "out": "R" },
-      { "name": "Teclas",   "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_teclas.mp3",  "out": "R" },
-      { "name": "Guitarra rítmica", "url": "https://archive.org/download/IDENTIFICADOR_DEL_ITEM/01_gtr.mp3", "out": "R", "shift": false }
-    ]
-  }
+  "_nota": "Opcional. Normalmente el enlace de archive.org se pega en la ficha de la canción dentro de la app. Este archivo solo sirve para listar pistas a mano (llave = ID de la canción)."
 }
