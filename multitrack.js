@@ -20,6 +20,14 @@
  *   "out" es opcional: L si el nombre contiene click/guía/voz/cue, R en los demás casos.
  *   "shift" es opcional: false = esa pista nunca cambia de tono; por defecto solo se excluyen
  *   click, guía/voz, batería, percusión y loops.
+ *
+ * Lo normal: el enlace del item de archive.org se pega en la ficha de la canción (modo administrador) y
+ * se guarda en el Google Sheet; secuencias.json queda solo como opción manual / de respaldo.
+ *
+ * Forma corta (recomendada): en vez de listar cada pista, se indica el item de archive.org y la app
+ * lee sola sus archivos (las pistas nuevas aparecen sin tocar GitHub):
+ *   { "<id de canción>": { "item": "bautizados_en_fuego", "key": "G", "skip": ["EG 4", "Keys 3"] } }
+ *   "skip" es opcional: nombres de archivo (sin .mp3) que no se cargan. También vale: "12": "bautizados_en_fuego".
  */
 (function () {
   'use strict';
@@ -31,7 +39,10 @@
     MAX_TRACKS: 16,
     MEM_WARN_BYTES: 600 * 1024 * 1024,            // aviso si lo decodificado supera esto
     PREFS_KEY: 'alabanza.multi',
-    START_DELAY: 0.15 // s de margen para que todas las pistas arranquen en el mismo instante
+    START_DELAY: 0.15, // s de margen para que todas las pistas arranquen en el mismo instante
+    ITEMS_KEY: 'alabanza.multi.items',               // últimas listas de archivos leídas (para usarse sin internet)
+    ARCHIVE_BASE: 'https://archive.org/download/',   // si el CORS falla, cambiar a 'https://archive.org/cors/'
+    AUDIO_RE: /\.(mp3|wav|flac|m4a|ogg|opus|aac)$/i
   };
 
   const LEFT_RE = /click|gu[ií]a|guide|voz|cue/i;
@@ -137,6 +148,14 @@
     const token = ++loadToken;
     stop();
     if (!keepAdjust) adjust = 0;
+    if (info.item && !(keepAdjust && info.tracks)) { // forma corta: se lee la lista de pistas del item
+      status('Leyendo la lista de pistas…');
+      try { info.tracks = await resolveItem(info.item, info.skip); } catch (e) {
+        if (token === loadToken) { status('No se pudo leer las pistas: ' + reason(e), true); toast('No se pudo leer las pistas: ' + reason(e), 'error'); }
+        return false;
+      }
+      if (token !== loadToken) return false;
+    }
     baseSemis = info.tone && info.key ? Music.semitonesBetween(info.key, info.tone) : 0;
     const semis = clamp(baseSemis + adjust, -MAX_SHIFT, MAX_SHIFT);
     let shiftFailed = false;
@@ -284,12 +303,55 @@
       });
   }
 
+  // ---------- Pistas leídas directo de un item de archive.org ----------
+  const ITEM_RE = /^[A-Za-z0-9][A-Za-z0-9_.\-]*$/;
+  const stripExt = (n) => n.replace(/\.[^.\/]+$/, '');
+  const natural = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+  function readItemCache() { try { return JSON.parse(localStorage.getItem(CONFIG.ITEMS_KEY)) || {}; } catch (e) { return {}; } }
+  function writeItemCache(item, files) {
+    const all = readItemCache();
+    all[item] = { files, at: Date.now() };
+    try { localStorage.setItem(CONFIG.ITEMS_KEY, JSON.stringify(all)); } catch (e) { /* noop */ }
+  }
+
+  /** Pistas de un item: con internet lee la lista de archive.org (las pistas nuevas aparecen solas);
+   *  sin internet usa la última lista guardada. Solo cuenta audio original (no las copias que genera archive.org). */
+  async function resolveItem(item, skip) {
+    let files = null;
+    try {
+      const r = await fetch('https://archive.org/metadata/' + encodeURIComponent(item), { cache: 'no-cache' });
+      if (r.ok) {
+        const j = await r.json();
+        files = (j.files || []).filter((f) => f.source === 'original' && CONFIG.AUDIO_RE.test(f.name)).map((f) => f.name);
+        if (files.length) writeItemCache(item, files);
+      }
+    } catch (e) { /* sin red o sin CORS: se usa la lista guardada */ }
+    if (!files || !files.length) { const c = readItemCache()[item]; files = c ? c.files : null; }
+    if (!files || !files.length) throw new Error('no se pudo leer la lista de pistas de archive.org');
+    const skipSet = new Set((skip || []).map((x) => String(x).trim().toLowerCase()));
+    const list = files
+      .filter((n) => !skipSet.has(stripExt(n).toLowerCase()) && !skipSet.has(n.toLowerCase()))
+      .map((n) => ({
+        name: stripExt(n.split('/').pop()),
+        url: CONFIG.ARCHIVE_BASE + encodeURIComponent(item) + '/' + n.split('/').map(encodeURIComponent).join('/')
+      }))
+      .sort((a, b) => (LEFT_RE.test(b.name) - LEFT_RE.test(a.name)) || natural(a.name, b.name)); // click y guía primero
+    const tracks = normTracks(list);
+    if (!tracks.length) throw new Error('el item no tiene pistas de audio');
+    return tracks;
+  }
+
+  /** Acepta por canción: "item" (forma corta) o la lista manual de pistas ("tracks") */
   function setCatalog(obj) {
     Object.keys(obj || {}).forEach((k) => {
       if (!/^\d+$/.test(k)) return;
-      const list = normTracks(obj[k]);
-      const key = obj[k] && typeof obj[k].key === 'string' && /^[A-G][#b]?$/.test(obj[k].key) ? obj[k].key : '';
-      if (list.length) catalog[k] = { key, tracks: list };
+      const v = obj[k];
+      const key = v && typeof v.key === 'string' && /^[A-G][#b]?$/.test(v.key) ? v.key : '';
+      const item = typeof v === 'string' ? v : (v && typeof v.item === 'string' ? v.item : '');
+      const list = typeof v === 'string' ? [] : normTracks(v);
+      if (list.length) catalog[k] = { key, tracks: list, item: '', skip: [] };
+      else if (ITEM_RE.test(item)) catalog[k] = { key, tracks: null, item, skip: Array.isArray(v && v.skip) ? v.skip : [] };
     });
     refreshSongs();
   }
@@ -304,12 +366,30 @@
   const currentDate = () => { const el = $('setlist-date'); return el && el.value ? el.value : ''; };
 
   /** Canciones del setlist de la fecha elegida que tienen secuencia */
+  /** Identificador de archive.org a partir de un enlace (details, download, items) o del identificador solo */
+  function parseItem(text) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    const m = t.match(/archive\.org\/(?:details|download|embed|metadata|compress|stream)\/([A-Za-z0-9][A-Za-z0-9_.\-]*)/i) ||
+              t.match(/\/items\/([A-Za-z0-9][A-Za-z0-9_.\-]*)/);
+    const id = m ? m[1] : t;
+    return ITEM_RE.test(id) ? id : '';
+  }
+
+  /** Secuencia de una canción: primero la de su ficha (Google Sheet), si no la de secuencias.json */
+  function sequenceFor(s) {
+    const item = parseItem(s.sequence);
+    if (item) return { key: '', tracks: null, item, skip: String(s.seqSkip || '').split(',').map((x) => x.trim()).filter(Boolean) };
+    return catalog[s.id] || null;
+  }
+
   function setlistSongs(date) {
     const out = [];
     if (window.Database && Database.isLoaded()) {
       Database.getSetlistEntries(date).forEach((e) => {
         const s = Database.getSongById(e.songId);
-        if (s && catalog[s.id]) out.push({ id: s.id, title: s.title, tracks: catalog[s.id].tracks, key: catalog[s.id].key || s.originalKey, tone: e.toneForService || '' });
+        const c = s ? sequenceFor(s) : null;
+        if (c) out.push({ id: s.id, title: s.title, tracks: c.tracks, item: c.item, skip: c.skip, key: c.key || s.originalKey, tone: e.toneForService || '' });
       });
     }
     return out;
@@ -321,10 +401,14 @@
     let list = setlistSongs(currentDate());
     const fromSetlist = list.length > 0;
     if (!fromSetlist) { // sin setlist con secuencias: se ofrece todo el catálogo
-      list = Object.keys(catalog).map((id) => {
-        const s = window.Database && Database.isLoaded() ? Database.getSongById(id) : null;
-        return { id: Number(id), title: s ? s.title : 'Canción ' + id, tracks: catalog[id].tracks, key: catalog[id].key || (s ? s.originalKey : ''), tone: '' };
-      });
+      const ids = new Set(Object.keys(catalog));
+      const ready = window.Database && Database.isLoaded();
+      if (ready) Database.getAllSongs().forEach((x) => { if (parseItem(x.sequence)) ids.add(String(x.id)); });
+      list = [...ids].map((id) => {
+        const s = ready ? Database.getSongById(id) : null;
+        const c = (s ? sequenceFor(s) : null) || catalog[id];
+        return { id: Number(id), title: s ? s.title : 'Canción ' + id, tracks: c.tracks, item: c.item, skip: c.skip, key: c.key || (s ? s.originalKey : ''), tone: '' };
+      }).sort((a, b) => a.title.localeCompare(b.title));
     }
     lastList = {};
     list.forEach((s) => { lastList[s.id] = s; });
@@ -356,11 +440,21 @@
     if (!('caches' in window)) { toast('Este navegador no permite guardar archivos offline (se necesita HTTPS)', 'error'); return; }
     const date = currentDate();
     const urls = [];
-    setlistSongs(date).forEach((s) => s.tracks.forEach((t) => { if (urls.indexOf(t.url) === -1) urls.push(t.url); }));
-    if (!urls.length) { toast('Ninguna canción de este setlist tiene secuencia', 'error'); return; }
-
     downloading = true;
     $('mt-download').disabled = true;
+    setBadge('⏳ Leyendo listas de pistas…');
+    for (const s of setlistSongs(date)) {
+      try { if (s.item) s.tracks = await resolveItem(s.item, s.skip); } catch (e) {
+        toast('No se pudo leer las pistas de "' + s.title + '"', 'error');
+        continue;
+      }
+      (s.tracks || []).forEach((t) => { if (urls.indexOf(t.url) === -1) urls.push(t.url); });
+    }
+    if (!urls.length) {
+      downloading = false; refreshSongs(); updateBadge();
+      toast('Ninguna canción de este setlist tiene secuencia', 'error');
+      return;
+    }
     await requestPersist();
     const name = CONFIG.CACHE_PREFIX + (date || 'setlist');
     let bytes = 0, failed = 0, done = 0, overLimit = false;
