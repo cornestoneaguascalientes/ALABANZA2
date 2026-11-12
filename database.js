@@ -73,7 +73,9 @@
       bpm: Number(s.bpm) || 120,
       lyrics: String(s.lyrics == null ? '' : s.lyrics),
       lastModified: s.lastModified || '',
-      timeSig: /^\d{1,2}\/\d{1,2}$/.test(String(s.timeSig)) ? String(s.timeSig) : '4/4'
+      timeSig: /^\d{1,2}\/\d{1,2}$/.test(String(s.timeSig)) ? String(s.timeSig) : '4/4',
+      sequence: String(s.sequence == null ? '' : s.sequence),   // identificador del item de archive.org
+      seqSkip: String(s.seqSkip == null ? '' : s.seqSkip)       // pistas que no se cargan (separadas por comas)
     };
   }
 
