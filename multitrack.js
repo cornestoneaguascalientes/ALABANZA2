@@ -10,6 +10,8 @@
  *   terminar bien, borra los cachés de setlists anteriores. Pide almacenamiento persistente.
  * - El audio se lee de Cache Storage desde la página (no depende del Service Worker).
  *
+ * - Precarga: mientras suena una canción, la siguiente del setlist se prepara en segundo plano (decodificada y
+ *   con su cambio de tono ya aplicado), así que pasar a ella es casi instantáneo. Se limita por memoria.
  * - Cambio de tono: el tono de la canción en la biblioteca (o "key" del catálogo) se compara con el
  *   "tono para el servicio" del setlist y las pistas melódicas se procesan UNA vez al cargar
  *   (pitchshift.js), sin cambiar la duración. Click, guía, batería y percusión no se tocan.
@@ -42,7 +44,9 @@
     START_DELAY: 0.15, // s de margen para que todas las pistas arranquen en el mismo instante
     ITEMS_KEY: 'alabanza.multi.items',               // últimas listas de archivos leídas (para usarse sin internet)
     ARCHIVE_BASE: 'https://archive.org/download/',   // si el CORS falla, cambiar a 'https://archive.org/cors/'
-    AUDIO_RE: /\.(mp3|wav|flac|m4a|ogg|opus|aac)$/i
+    AUDIO_RE: /\.(mp3|wav|flac|m4a|ogg|opus|aac)$/i,
+    PRELOAD_AHEAD: 1,        // cuántas canciones siguientes se precargan
+    BUDGET_MB: 0             // tope de memoria para canciones cargadas; 0 = se calcula según el equipo
   };
 
   const LEFT_RE = /click|gu[ií]a|guide|voz|cue/i;
@@ -77,11 +81,12 @@
     try {
       const p = JSON.parse(localStorage.getItem(CONFIG.PREFS_KEY)) || {};
       if (p.mode === 'split') mode = 'split';
+      if (p.preload === false) preloadOn = false;
       if (p.vol && typeof p.vol === 'object') Object.keys(p.vol).forEach((k) => { volPrefs[k] = clamp(p.vol[k], 0, 1); });
     } catch (e) { /* noop */ }
   }
   function savePrefs() {
-    try { localStorage.setItem(CONFIG.PREFS_KEY, JSON.stringify({ mode, vol: volPrefs })); } catch (e) { /* noop */ }
+    try { localStorage.setItem(CONFIG.PREFS_KEY, JSON.stringify({ mode, vol: volPrefs, preload: preloadOn })); } catch (e) { /* noop */ }
   }
 
   // ---------- Grafo de audio ----------
@@ -144,63 +149,178 @@
 
   const reason = (e) => (e && e.name === 'TypeError' ? 'sin conexión o el servidor bloquea CORS' : (e && e.message) || 'error desconocido');
 
+  // ---------- Carga y precarga ----------
+  const cache = new Map();          // "id|semitonos" -> canción ya preparada { tracks, buffers, duration, mem, ... }
+  let inflight = null;              // precarga en curso: { key, promise }
+  let preloadToken = 0, preloadOn = true, currentKey = '';
+
+  const keyOf = (info, semis) => info.id + '|' + semis;
+  const semisFor = (info, adj) => clamp((info.tone && info.key ? Music.semitonesBetween(info.key, info.tone) : 0) + (adj || 0), -MAX_SHIFT, MAX_SHIFT);
+  const isCoarse = () => { try { return !!(window.matchMedia && matchMedia('(pointer: coarse)').matches); } catch (e) { return false; } };
+  const concurrency = () => (isCoarse() ? 1 : 3);
+  /** Tope de memoria para lo cargado (la actual + las precargadas): calculado según el equipo, o CONFIG.BUDGET_MB */
+  function budgetBytes() {
+    if (CONFIG.BUDGET_MB > 0) return CONFIG.BUDGET_MB * 1048576;
+    const dm = navigator.deviceMemory || (isCoarse() ? 4 : 8);
+    return (isCoarse() ? dm * 0.15 : dm * 0.5) * 1073741824;
+  }
+  const cachedBytes = () => [...cache.values()].reduce((a, q) => a + q.mem, 0);
+  const setNext = (t) => { const el = $('mt-next'); if (el) el.textContent = t || ''; };
+
+  async function mapPool(items, limit, fn) {
+    let i = 0;
+    const run = async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  }
+
+  /** Lee/descarga, decodifica y (si hace falta) cambia el tono de todas las pistas de una canción. No toca la reproducción. */
+  async function prepareSong(info, semis, cancelled, onStatus, forceResolve) {
+    const t0 = performance.now();
+    let trs = info.tracks;
+    if (info.item && (forceResolve || !trs)) {       // forma corta: se lee la lista de pistas del item
+      onStatus('Leyendo la lista de pistas…');
+      trs = await resolveItem(info.item, info.skip);
+      if (cancelled()) return null;
+    }
+    if (!trs || !trs.length) throw new Error('esta canción no tiene pistas configuradas');
+    ensureGraph();
+    const bufs = {};
+    let shiftFailed = false, done = 0, failed = null;
+    await mapPool(trs, concurrency(), async (t) => {   // en la computadora se decodifican varias a la vez
+      if (failed || cancelled()) return;
+      try {
+        let buf = await decode(await getBytes(t.url));
+        if (failed || cancelled()) return;
+        if (semis && t.shift) {
+          if (window.PitchShift) {
+            try {
+              buf = await PitchShift.shiftBuffer(ctx, buf, semis, (f) => { if (!cancelled()) onStatus('Cambiando tono de ' + t.name + '… ' + Math.round(f * 100) + '%'); });
+            } catch (e) { shiftFailed = true; }
+          } else shiftFailed = true;
+        }
+        bufs[t.id] = buf; done++;
+        onStatus('Cargando pistas… ' + done + '/' + trs.length);
+      } catch (e) { if (!failed) failed = e; }
+    });
+    if (cancelled()) return null;
+    if (failed) throw failed;
+    const ds = trs.map((t) => bufs[t.id].duration);
+    const duration = Math.max.apply(null, ds);
+    return {
+      tracks: trs, buffers: bufs, duration, shiftFailed,
+      diff: duration - Math.min.apply(null, ds),
+      mem: trs.reduce((a, t) => a + bufs[t.id].length * bufs[t.id].numberOfChannels * 4, 0),
+      secs: (performance.now() - t0) / 1000, fromPreload: false
+    };
+  }
+
   async function load(info, keepAdjust) {
     const token = ++loadToken;
-    stop();
     if (!keepAdjust) adjust = 0;
-    if (info.item && !(keepAdjust && info.tracks)) { // forma corta: se lee la lista de pistas del item
-      status('Leyendo la lista de pistas…');
-      try { info.tracks = await resolveItem(info.item, info.skip); } catch (e) {
-        if (token === loadToken) { status('No se pudo leer las pistas: ' + reason(e), true); toast('No se pudo leer las pistas: ' + reason(e), 'error'); }
-        return false;
-      }
-      if (token !== loadToken) return false;
-    }
+    stop();
     baseSemis = info.tone && info.key ? Music.semitonesBetween(info.key, info.tone) : 0;
     const semis = clamp(baseSemis + adjust, -MAX_SHIFT, MAX_SHIFT);
-    let shiftFailed = false;
+    const key = keyOf(info, semis);
+    const sameInflight = !!inflight && inflight.key === key;   // si ya se está precargando esta, se espera en vez de empezar de nuevo
+    if (!sameInflight) cancelPreload();
     ready = false; buffers = {}; duration = 0; offset = 0; song = info; tracks = info.tracks || [];
     ensureGraph();
     buildChannels();
     buildMixer();
     renderAll();
-    if (!tracks.length) { status('Esta canción no tiene pistas configuradas', true); return false; }
-    try {
-      for (let n = 0; n < tracks.length; n++) { // una por una: decodificar todas a la vez dispara la memoria
-        status('Cargando ' + tracks[n].name + '… (' + (n + 1) + '/' + tracks.length + ')');
-        let buf = await decode(await getBytes(tracks[n].url));
-        if (token !== loadToken) return false;
-        if (semis && tracks[n].shift && window.PitchShift) {
-          const name = tracks[n].name;
-          try {
-            buf = await PitchShift.shiftBuffer(ctx, buf, semis, (f) => {
-              if (token === loadToken) status('Cambiando tono de ' + name + '… ' + Math.round(f * 100) + '% (' + (n + 1) + '/' + tracks.length + ')');
-            });
-          } catch (e) { shiftFailed = true; }
-          if (token !== loadToken) return false;
-        } else if (semis && tracks[n].shift && !window.PitchShift) shiftFailed = true;
-        buffers[tracks[n].id] = buf;
-      }
-    } catch (e) {
+
+    let p = cache.get(key);
+    if (!p && sameInflight) {
+      status('Terminando de preparar la canción…');
+      try { await inflight.promise; } catch (e) { /* se reintenta abajo */ }
       if (token !== loadToken) return false;
-      status('No se pudo cargar: ' + reason(e), true);
-      toast('No se pudo cargar la secuencia: ' + reason(e), 'error');
-      renderAll();
-      return false;
+      p = cache.get(key);
     }
-    const ds = tracks.map((t) => buffers[t.id].duration);
-    duration = Math.max.apply(null, ds);
-    const diff = duration - Math.min.apply(null, ds);
-    const mem = tracks.reduce((s, t) => s + buffers[t.id].length * buffers[t.id].numberOfChannels * 4, 0);
+    if (!p) {
+      try {
+        p = await prepareSong(info, semis, () => token !== loadToken, (t) => { if (token === loadToken) status(t); }, !(keepAdjust && info.tracks));
+      } catch (e) {
+        if (token === loadToken) {
+          status('No se pudo cargar: ' + reason(e), true);
+          toast('No se pudo cargar la secuencia: ' + reason(e), 'error');
+          renderAll();
+        }
+        return false;
+      }
+      if (!p || token !== loadToken) return false;
+      cache.set(key, p);
+    }
+    install(p, semis, key);
+    return true;
+  }
+
+  /** Deja lista para tocar una canción ya preparada */
+  function install(p, semis, key) {
+    song.tracks = p.tracks;
+    tracks = p.tracks; buffers = p.buffers; duration = p.duration;
+    currentKey = key;
+    buildChannels();
+    buildMixer();
     ready = true;
-    if (diff > 0.05) status('Aviso: las pistas no miden lo mismo (' + diff.toFixed(2) + ' s de diferencia). Reexporta todas con la misma duración.', true);
-    else if (shiftFailed) status('Aviso: no se pudo cambiar el tono; las pistas suenan en su tono original.', true);
-    else if (mem > CONFIG.MEM_WARN_BYTES) status('Lista, pero usa ~' + sizeText(mem) + ' de memoria. Si el celular se traba, exporta las pistas en mono.', true);
+    renderDownload();
+    const how = p.fromPreload ? ' · precargada' : (p.secs >= 1 ? ' · cargó en ' + p.secs.toFixed(1) + ' s' : '');
+    if (p.diff > 0.05) status('Aviso: las pistas no miden lo mismo (' + p.diff.toFixed(2) + ' s de diferencia). Reexporta todas con la misma duración.', true);
+    else if (p.shiftFailed) status('Aviso: no se pudo cambiar el tono; las pistas suenan en su tono original.', true);
+    else if (p.mem > CONFIG.MEM_WARN_BYTES && isCoarse()) status('Lista, pero usa ~' + sizeText(p.mem) + ' de memoria. Si el celular se traba, exporta las pistas en mono.', true);
     else if (Math.abs(semis) > 3) status('Lista · cambio de ' + semis + ' semitonos: puede sonar artificial en voces y teclas.', true);
-    else status('Lista · ' + tracks.length + ' pistas' + (semis ? ' · ' + toneLabel() : ''));
+    else status('Lista · ' + tracks.length + ' pistas' + (semis ? ' · ' + toneLabel() : '') + how);
     renderAll();
     updateBadge();
-    return true;
+    trimCache();
+    schedulePreload();
+  }
+
+  /** Canciones que siguen a la actual en el setlist de la fecha elegida */
+  function nextTargets() {
+    if (!song) return [];
+    const list = setlistSongs(currentDate());
+    const i = list.findIndex((x) => x.id === song.id);
+    return i < 0 ? [] : list.slice(i + 1, i + 1 + CONFIG.PRELOAD_AHEAD);
+  }
+
+  /** Libera de memoria lo que ya no hace falta: se queda la actual y las que siguen */
+  function trimCache() {
+    const keep = new Set([currentKey]);
+    if (preloadOn) nextTargets().forEach((t) => keep.add(keyOf(t, semisFor(t, 0))));
+    [...cache.keys()].forEach((k) => { if (!keep.has(k)) cache.delete(k); });
+  }
+
+  function cancelPreload() { preloadToken++; setNext(''); }
+
+  /** Prepara en segundo plano la(s) siguiente(s) canción(es) del setlist */
+  async function schedulePreload() {
+    const pt = ++preloadToken;
+    const cancelled = () => pt !== preloadToken;
+    if (!preloadOn || !ready) { setNext(''); return; }
+    const targets = nextTargets();
+    if (!targets.length) { setNext(''); return; }
+    for (const t of targets) {
+      if (cancelled()) return;
+      const sem = semisFor(t, 0), key = keyOf(t, sem);
+      if (cache.has(key)) { setNext('Siguiente lista: ' + t.title); continue; }
+      const est = Math.max.apply(null, [0].concat([...cache.values()].map((q) => q.mem)));
+      if (cachedBytes() + est > budgetBytes()) {
+        setNext('No se precarga "' + t.title + '": la memoria no alcanza. Junta pistas o expórtalas en mono.');
+        return;
+      }
+      const promise = prepareSong(t, sem, cancelled, (m) => { if (!cancelled()) setNext('Precargando "' + t.title + '": ' + m); }, true)
+        .then((p) => { if (p && !cancelled()) { p.fromPreload = true; cache.set(key, p); } return p; });
+      inflight = { key, promise };
+      try {
+        const p = await promise;
+        if (p && !cancelled()) setNext('Siguiente lista: ' + t.title + ' (' + p.secs.toFixed(1) + ' s en prepararse)');
+      } catch (e) {
+        if (!cancelled()) setNext('No se pudo precargar "' + t.title + '": ' + reason(e));
+        return;
+      } finally {
+        if (inflight && inflight.promise === promise) inflight = null;
+      }
+    }
   }
 
   // ---------- Transporte ----------
@@ -415,8 +535,26 @@
     const keep = song ? String(song.id) : '';
     sel.innerHTML = '<option value="">' + (list.length ? 'Elige una canción…' : 'No hay secuencias configuradas') + '</option>' +
       list.map((s) => '<option value="' + s.id + '"' + (String(s.id) === keep ? ' selected' : '') + '>' + esc(s.title) + '</option>').join('');
-    $('mt-download').disabled = !fromSetlist || downloading;
-    $('mt-download').textContent = fromSetlist ? 'Descargar setlist offline' : 'Descargar setlist offline (sin secuencias en esta fecha)';
+    renderDownload();
+  }
+
+  /** Qué se descargará: las canciones del setlist de la fecha que tengan secuencia; si no hay, la canción elegida */
+  function downloadPlan() {
+    const date = currentDate();
+    const list = setlistSongs(date);
+    if (list.length) return { kind: 'setlist', songs: list, name: CONFIG.CACHE_PREFIX + (date || 'setlist') };
+    if (song) return { kind: 'song', songs: [song], name: CONFIG.CACHE_PREFIX + 'cancion-' + song.id };
+    return { kind: 'none', songs: [], name: '' };
+  }
+
+  function renderDownload() {
+    const b = $('mt-download');
+    if (!b) return;
+    const p = downloadPlan();
+    b.disabled = downloading;
+    b.textContent = p.kind === 'setlist'
+      ? 'Descargar setlist offline (' + p.songs.length + (p.songs.length === 1 ? ' canción)' : ' canciones)')
+      : p.kind === 'song' ? 'Descargar esta canción offline' : 'Descargar offline (elige una canción)';
   }
 
   // ---------- Offline: descarga + rotación ----------
@@ -438,26 +576,32 @@
   async function downloadSetlist() {
     if (downloading) return;
     if (!('caches' in window)) { toast('Este navegador no permite guardar archivos offline (se necesita HTTPS)', 'error'); return; }
-    const date = currentDate();
-    const urls = [];
+    const plan = downloadPlan();
+    if (plan.kind === 'none') {
+      toast('El setlist del ' + (currentDate() || 'día elegido') + ' no tiene canciones con secuencia. Agrégalas a ese setlist, o elige una canción de la lista y vuelve a tocar el botón.', 'error');
+      return;
+    }
+
     downloading = true;
-    $('mt-download').disabled = true;
+    renderDownload();
     setBadge('⏳ Leyendo listas de pistas…');
-    for (const s of setlistSongs(date)) {
+    const urls = [];
+    for (const s of plan.songs) {
       try { if (s.item) s.tracks = await resolveItem(s.item, s.skip); } catch (e) {
-        toast('No se pudo leer las pistas de "' + s.title + '"', 'error');
+        toast('No se pudo leer las pistas de "' + s.title + '": ' + reason(e), 'error');
         continue;
       }
       (s.tracks || []).forEach((t) => { if (urls.indexOf(t.url) === -1) urls.push(t.url); });
     }
     if (!urls.length) {
-      downloading = false; refreshSongs(); updateBadge();
-      toast('Ninguna canción de este setlist tiene secuencia', 'error');
+      downloading = false; renderDownload(); updateBadge();
+      toast('No se encontraron pistas para descargar', 'error');
       return;
     }
-    await requestPersist();
-    const name = CONFIG.CACHE_PREFIX + (date || 'setlist');
-    let bytes = 0, failed = 0, done = 0, overLimit = false;
+
+    requestPersist(); // sin esperar: en algunos navegadores pregunta al usuario y no debe frenar la descarga
+    const name = plan.name;
+    let bytes = 0, failed = 0, done = 0, overLimit = false, firstErr = '';
 
     try {
       const cache = await caches.open(name);
@@ -477,6 +621,7 @@
               await cache.put(url, new Response(blob, { headers: { 'Content-Type': blob.type || 'audio/mpeg' } }));
               ok = true;
             } catch (e) {
+              if (!firstErr) firstErr = e && e.name === 'QuotaExceededError' ? 'no hay espacio en el celular' : reason(e);
               if (e && e.name === 'QuotaExceededError' && attempt === 0) await dropOtherCaches(name); // sin espacio: libera los setlists viejos y reintenta
             }
           }
@@ -486,16 +631,21 @@
         showProgress(done / urls.length * 100);
       }
 
+      if (!overLimit && !failed) {                           // comprobación final: todo está realmente guardado
+        for (const url of urls) if (!(await cache.match(url))) { failed++; if (!firstErr) firstErr = 'el navegador no guardó el archivo'; }
+      }
+
       if (overLimit) {
         toast('Se alcanzó el límite de 1.5 GB. Este setlist es demasiado grande', 'error');
       } else if (failed) {
-        toast(failed + ' archivo(s) no se pudieron descargar. Reintenta con buena señal (el setlist anterior se conservó)', 'error');
+        toast(failed + ' de ' + urls.length + ' archivos no se guardaron (' + firstErr + '). Reintenta con buena señal.' + (plan.kind === 'setlist' ? ' El setlist anterior se conservó.' : ''), 'error');
       } else {
-        // Rotación: ya está todo el setlist nuevo, ahora sí se borra el anterior
-        await dropOtherCaches(name);
-        const wanted = new Set(urls.map(absUrl));
-        for (const req of await cache.keys()) if (!wanted.has(req.url)) await cache.delete(req);
-        toast('Setlist guardado para usarse sin internet');
+        if (plan.kind === 'setlist') {                       // Rotación: ya está todo el setlist nuevo, ahora sí se borra el anterior
+          await dropOtherCaches(name);
+          const wanted = new Set(urls.map(absUrl));
+          for (const req of await cache.keys()) if (!wanted.has(req.url)) await cache.delete(req);
+        }
+        toast('Listo para usarse sin internet: ' + plan.songs.length + (plan.songs.length === 1 ? ' canción, ' : ' canciones, ') + urls.length + ' pistas' + (bytes ? ' (' + sizeText(bytes) + ' nuevos)' : ' (ya estaban guardadas)'));
       }
     } catch (e) {
       toast('No se pudo descargar: ' + reason(e), 'error');
@@ -503,7 +653,7 @@
 
     downloading = false;
     showProgress(null);
-    refreshSongs();
+    renderDownload();
     updateBadge();
     updateStorage();
   }
@@ -656,13 +806,22 @@
     $('mt-song').addEventListener('change', (e) => {
       const id = e.target.value;
       if (!id) {
-        loadToken++; stop(); teardownChannels(); song = null; tracks = []; ready = false; buffers = {}; duration = 0;
-        buildMixer(); renderAll(); updateBadge(); status('');
+        loadToken++; cancelPreload(); cache.clear(); currentKey = '';
+        stop(); teardownChannels(); song = null; tracks = []; ready = false; buffers = {}; duration = 0;
+        buildMixer(); renderAll(); updateBadge(); status(''); renderDownload();
         return;
       }
       if (lastList[id]) load(lastList[id]);
     });
     $('mt-download').addEventListener('click', downloadSetlist);
+    const pc = $('mt-preload');
+    if (pc) {
+      pc.checked = preloadOn;
+      pc.addEventListener('change', () => {
+        preloadOn = pc.checked; savePrefs();
+        if (preloadOn) schedulePreload(); else { cancelPreload(); trimCache(); }
+      });
+    }
     if ($('mt-pitch-down')) $('mt-pitch-down').addEventListener('click', () => nudge(-1));
     if ($('mt-pitch-up')) $('mt-pitch-up').addEventListener('click', () => nudge(1));
 
@@ -687,6 +846,9 @@
 
   window.Multitrack = {
     setCatalog, play, pause, stop, seek, setMode, downloadSetlist,
+    /** Multitrack.setPreload({ ahead: 2, budgetMB: 6000 }): cuántas siguientes precargar y cuánta memoria permitir */
+    setPreload: (o) => { if (o && o.ahead >= 0) CONFIG.PRELOAD_AHEAD = Math.min(4, Math.floor(o.ahead)); if (o && o.budgetMB >= 0) CONFIG.BUDGET_MB = o.budgetMB; if (ready) { trimCache(); schedulePreload(); } },
+    cacheInfo: () => ({ cached: [...cache.keys()], loading: inflight ? inflight.key : null, mb: Math.round(cachedBytes() / 1048576) }),
     /** Carga directa: Multitrack.load({ id: 1, title: 'Gracia', key: 'G', tone: 'A', tracks: [{ name, url, out }] }) */
     load: (info) => load({ id: info.id, title: info.title || '', key: info.key || '', tone: info.tone || '', tracks: normTracks(info.tracks || info) }),
     isReady: () => ready,
