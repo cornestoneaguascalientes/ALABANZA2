@@ -18,6 +18,8 @@
   <script src="theme.js"></script>
   <link rel="preload" as="image" href="logo_app_2.png">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="proyeccion.css">
+  <link rel="manifest" href="manifest.webmanifest">
 
   <!-- El orden importa -->
   <script src="music.js" defer></script>
@@ -31,6 +33,9 @@
   <script src="synth.js" defer></script>
   <script src="pitchshift.js" defer></script>
   <script src="multitrack.js" defer></script>
+  <script src="proy-core.js" defer></script>
+  <script src="proy-render.js" defer></script>
+  <script src="proy-operator.js" defer></script>
   <script src="setlist.js" defer></script>
 </head>
 <body class="on-home">
@@ -67,6 +72,7 @@
       <symbol id="i-tuner" viewBox="0 0 24 24"><path d="M8 3v8a4 4 0 0 0 8 0V3M12 15v6M9 21h6"/></symbol>
       <symbol id="i-drum" viewBox="0 0 24 24"><ellipse cx="12" cy="9" rx="8" ry="3"/><path d="M4 9v7c0 1.7 3.6 3 8 3s8-1.3 8-3V9M4 12.5c0 1.7 3.6 3 8 3s8-1.3 8-3M7 3l4 5M17 3l-4 5"/></symbol>
       <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" stroke-width="3"/></symbol>
+      <symbol id="i-projection" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></symbol>
       <symbol id="i-multi" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16M8 5v4M15 10v4M11 15v4"/></symbol>
       <symbol id="i-keys" viewBox="0 0 24 24"><path d="M3 6h18v12H3zM9 6v12M15 6v12"/><path d="M7.5 6v6M13.5 6v6" stroke-width="3"/></symbol>
     </defs>
@@ -102,6 +108,9 @@
       </button>
       <button class="nav-btn" data-view="tools">
         <svg class="i"><use href="#i-tools"/></svg><span>Herramientas</span>
+      </button>
+      <button class="nav-btn" data-view="projection">
+        <svg class="i"><use href="#i-projection"/></svg><span>Proyección</span>
       </button>
     </nav>
 
@@ -149,6 +158,11 @@
           <button class="menu-item" data-go="tools" data-focus="tool-multi">
             <span class="menu-ico"><svg class="i"><use href="#i-multi"/></svg></span>
             <span class="menu-text"><span class="menu-title">Secuencia</span><span class="menu-sub">Multipista: click, guía, pads y secuencia</span></span>
+            <svg class="i chev"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="menu-item" data-go="projection">
+            <span class="menu-ico"><svg class="i"><use href="#i-projection"/></svg></span>
+            <span class="menu-text"><span class="menu-title">Proyección</span><span class="menu-sub">Letras, Biblia y media en pantalla</span></span>
             <svg class="i chev"><use href="#i-chevron"/></svg>
           </button>
         </div>
@@ -384,6 +398,11 @@
           </div>
         </div>
 
+      </section>
+
+      <!-- PROYECCIÓN EN VIVO (consola del operador; la interfaz la construye proy-operator.js) -->
+      <section id="projection-view" class="view" aria-labelledby="view-title">
+        <div id="proy-root"></div>
       </section>
     </main>
   </div>
