@@ -9,7 +9,7 @@
   const icon = (n) => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`;
   const wrap12 = (n) => ((n + 5) % 12 + 12) % 12 - 5; // -5..+6
 
-  const TITLES = { home: 'Alabanza', library: 'Biblioteca', setlist: 'Setlist', tools: 'Herramientas' };
+  const TITLES = { home: 'Alabanza', library: 'Biblioteca', setlist: 'Setlist', tools: 'Herramientas', projection: 'Proyección' };
   const PREFS_KEY = 'alabanza.prefs';
 
   const state = {
@@ -70,6 +70,7 @@
     });
     // En Inicio solo se ve el menú principal; las barras aparecen al entrar a una sección
     document.body.classList.toggle('on-home', name === 'home');
+    document.body.classList.toggle('on-projection', name === 'projection'); // la consola de proyección usa todo el ancho
     $('view-title').textContent = TITLES[name];
     if (name === 'tools') showTool(focusId && focusId.indexOf('tool-') === 0 ? focusId : activeTool);
     else { if (window.Tuner) Tuner.stop(); if (window.Synth) Synth.allOff(); }
