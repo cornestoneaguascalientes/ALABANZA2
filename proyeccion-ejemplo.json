@@ -1,0 +1,101 @@
+{
+  "app": "alabanza-proyeccion",
+  "version": 1,
+  "_nota": "Datos de ejemplo para probar el módulo de Proyección. Las letras son originales (de prueba). El texto bíblico es Reina-Valera 1909, de dominio público; para RVR1960, NVI, etc. carga tu propio archivo JSON de Biblia desde la pestaña Biblia.",
+
+  "songs": [
+    {
+      "id": "demo-1",
+      "title": "Luz del alba (ejemplo)",
+      "author": "Letra de ejemplo",
+      "key": "G",
+      "lyrics": "[Verso 1]\n[G]Cuando el alba rompe el [D]cielo\n[Em]tu fidelidad me [C]habla\n[G]cada día nuevo es [D]prueba\n[Em]de que tú nunca [C]te vas\n\n[Pre-coro]\n[Am]Y mi alma [C]despierta\n[D]a cantar tu nombre\n\n[Coro]\n[G]Santo, santo, [D]santo eres tú\n[Em]nuestra voz se [C]une en adoración\n[G]Santo, santo, [D]santo eres tú\n[Em]hoy levantamos [C]nuestras manos a ti\n\n[Verso 2]\n[G]En la noche más os[D]cura\n[Em]tu presencia es mi [C]calma\n[G]no hay temor que pueda [D]más\n[Em]que el amor que me [C]sostiene\n\n[Puente]\n[Am]Todo lo que soy es [C]tuyo\n[G]todo lo que tengo [D]es de ti\n[Am]Todo lo que soy es [C]tuyo\n[G]hoy te entrego [D]mi vivir"
+    },
+    {
+      "id": "demo-2",
+      "title": "Firme estaré (ejemplo)",
+      "author": "Letra de ejemplo",
+      "key": "D",
+      "sections": [
+        { "label": "Verso 1", "text": "Aunque el viento sople fuerte\nyo confío en tu palabra\nmi esperanza está en tus manos\ny tu gracia me levanta" },
+        { "label": "Coro", "text": "Firme estaré, firme estaré\nsobre la roca que eres tú\nFirme estaré, firme estaré\ncantaré tu fidelidad" },
+        { "label": "Verso 2", "text": "En el valle y en la cumbre\ntu bondad me acompaña\ntodo cuanto soy te canta\ntodo cuanto soy te honra" },
+        { "label": "Final", "text": "Firme estaré\nfirme estaré en ti" }
+      ]
+    }
+  ],
+
+  "bibles": [
+    {
+      "id": "rv1909-demo",
+      "name": "Reina-Valera 1909 (demo)",
+      "short": "RV1909",
+      "books": [
+        {
+          "name": "Salmos",
+          "chapters": {
+            "23": {
+              "1": "JEHOVÁ es mi pastor; nada me faltará.",
+              "2": "En lugares de delicados pastos me hará yacer: Junto á aguas de reposo me pastoreará.",
+              "3": "Confortará mi alma; Me guiará por sendas de justicia por amor de su nombre.",
+              "4": "Aunque ande en valle de sombra de muerte, No temeré mal alguno: porque tú estarás conmigo; Tu vara y tu cayado me infundirán aliento.",
+              "5": "Aderezarás mesa delante de mí en presencia de mis angustiadores: Ungiste mi cabeza con aceite; mi copa está rebosando.",
+              "6": "Ciertamente el bien y la misericordia me seguirán todos los días de mi vida: Y en la casa de Jehová moraré por largos días."
+            }
+          }
+        },
+        {
+          "name": "Juan",
+          "chapters": {
+            "3": {
+              "16": "Porque de tal manera amó Dios al mundo, que ha dado á su Hijo unigénito, para que todo aquel que en él creyere, no se pierda, mas tenga vida eterna."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "rv1909-copia",
+      "name": "RV1909 copia (para probar dos versiones)",
+      "short": "COPIA",
+      "books": [
+        {
+          "name": "Salmos",
+          "chapters": {
+            "23": {
+              "1": "JEHOVÁ es mi pastor; nada me faltará.",
+              "2": "En lugares de delicados pastos me hará yacer: Junto á aguas de reposo me pastoreará.",
+              "3": "Confortará mi alma; Me guiará por sendas de justicia por amor de su nombre.",
+              "4": "Aunque ande en valle de sombra de muerte, No temeré mal alguno: porque tú estarás conmigo; Tu vara y tu cayado me infundirán aliento.",
+              "5": "Aderezarás mesa delante de mí en presencia de mis angustiadores: Ungiste mi cabeza con aceite; mi copa está rebosando.",
+              "6": "Ciertamente el bien y la misericordia me seguirán todos los días de mi vida: Y en la casa de Jehová moraré por largos días."
+            }
+          }
+        },
+        {
+          "name": "Juan",
+          "chapters": {
+            "3": {
+              "16": "Porque de tal manera amó Dios al mundo, que ha dado á su Hijo unigénito, para que todo aquel que en él creyere, no se pierda, mas tenga vida eterna."
+            }
+          }
+        }
+      ]
+    }
+  ],
+
+  "services": [
+    {
+      "id": "demo-servicio",
+      "name": "Servicio de ejemplo",
+      "items": [
+        { "type": "countdown", "minutes": 5, "label": "Empezamos en" },
+        { "type": "text", "title": "Bienvenida", "text": "¡Bienvenidos!\n\nDios es bueno\ny su misericordia es para siempre" },
+        { "type": "song", "songId": "demo-1" },
+        { "type": "bible", "ref": "Sal 23 1-4", "versions": ["rv1909-demo", "rv1909-copia"] },
+        { "type": "song", "songId": "demo-2" },
+        { "type": "text", "title": "Anuncios", "text": "Anuncios de la semana\n\nReunión de oración\nmiércoles 7:00 p.m." }
+      ]
+    }
+  ]
+}

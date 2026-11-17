@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alabanza · Proyección</title>
+  <link rel="icon" href="logo_app.jpg">
+  <link rel="stylesheet" href="proyeccion.css">
+  <style>
+    /* Ventana limpia: sin márgenes, sin barras de desplazamiento */
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #out { position: fixed; inset: 0; }
+    body.cursor-hide, body.cursor-hide * { cursor: none; }
+    #hint {
+      position: fixed; left: 50%; bottom: 4%; transform: translateX(-50%); z-index: 5;
+      font: 14px system-ui, sans-serif; color: #888; background: rgba(0,0,0,.55); padding: 8px 14px; border-radius: 999px;
+      transition: opacity .6s ease; pointer-events: none; text-align: center;
+    }
+    #hint.off { opacity: 0; }
+  </style>
+</head>
+<body>
+  <!--
+    Esta página es la SALIDA. No tiene botones: todo lo controla la consola del operador (index.html > Proyección).
+      salida.html                 Pantalla de proyección (arrástrala al proyector; F11, doble clic o F = pantalla completa)
+      salida.html?modo=lower      Lower Third para OBS: fondo transparente o croma, texto en el tercio inferior
+      salida.html?modo=escenario  Vista de escenario: letra actual, siguiente y reloj
+  -->
+  <div id="out"></div>
+  <div id="hint">Esperando al operador… Doble clic (o F) = pantalla completa</div>
+
+  <script src="proy-core.js"></script>
+  <script src="proy-render.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var params = new URLSearchParams(location.search);
+      var m = params.get('modo');
+      var mode = (m === 'lower' || m === 'escenario') ? m : 'pantalla';
+      document.title = 'Alabanza · ' + (mode === 'lower' ? 'Lower Third' : mode === 'escenario' ? 'Escenario' : 'Proyección');
+
+      // Lower Third: toda la página transparente (OBS la captura sin fondo)
+      if (mode === 'lower') document.documentElement.style.background = document.body.style.background = 'transparent';
+
+      var hint = document.getElementById('hint');
+      if (mode === 'lower') hint.style.display = 'none';
+
+      var ch = Proy.channel();
+      var r = Proy.Render.mount(document.getElementById('out'), {
+        mode: mode,
+        onAudioBlocked: function () { ch.send({ t: 'audio-blocked' }); }
+      });
+
+      // Cada mensaje trae el estado completo; se ignoran los que lleguen viejos o repetidos
+      var lastTs = 0, got = false;
+      function apply(s) {
+        if (!s || s.ts < lastTs) return;
+        lastTs = s.ts;
+        r.update(s);
+        if (!got) { got = true; hint.classList.add('off'); }
+      }
+      apply(ch.loadState());                       // si se abre tarde, muestra lo último que se proyectó
+      ch.on(function (msg) { if (msg && msg.t === 'state') apply(msg.s); });
+
+      // Avisa al operador que esta salida está abierta (y le pide el estado actual)
+      var id = Math.random().toString(36).slice(2);
+      function hello() { ch.send({ t: 'hello', id: id, mode: mode }); }
+      hello();
+      setInterval(hello, 3000);
+
+      // Pantalla completa: doble clic, F o F11
+      function toggleFs() {
+        if (!document.fullscreenElement) { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {}); }
+        else document.exitFullscreen();
+      }
+      addEventListener('dblclick', toggleFs);
+      addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') toggleFs(); });
+
+      // El cursor se oculta solo a los 2 s sin moverlo
+      var t = null;
+      function wake() { document.body.classList.remove('cursor-hide'); clearTimeout(t); t = setTimeout(function () { document.body.classList.add('cursor-hide'); }, 2000); }
+      addEventListener('mousemove', wake); wake();
+    })();
+  </script>
+</body>
+</html>
