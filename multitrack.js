@@ -132,13 +132,14 @@
   }
 
   // ---------- Carga (caché primero, red después) ----------
-  async function getBytes(url) {
+  async function getBytes(url, stats) {
     if ('caches' in window) {
       const hit = await caches.match(url);
-      if (hit) return hit.arrayBuffer();
+      if (hit) { if (stats) stats.saved++; return hit.arrayBuffer(); }
     }
     const r = await fetch(url, { mode: 'cors' });
     if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (stats) stats.net++;
     return r.arrayBuffer();
   }
 
@@ -185,16 +186,18 @@
     if (!trs || !trs.length) throw new Error('esta canción no tiene pistas configuradas');
     ensureGraph();
     const bufs = {};
+    const stats = { net: 0, saved: 0, shifted: 0 };   // de dónde salió cada pista y a cuántas se les cambió el tono
     let shiftFailed = false, done = 0, failed = null;
     await mapPool(trs, concurrency(), async (t) => {   // en la computadora se decodifican varias a la vez
       if (failed || cancelled()) return;
       try {
-        let buf = await decode(await getBytes(t.url));
+        let buf = await decode(await getBytes(t.url, stats));
         if (failed || cancelled()) return;
         if (semis && t.shift) {
           if (window.PitchShift) {
             try {
               buf = await PitchShift.shiftBuffer(ctx, buf, semis, (f) => { if (!cancelled()) onStatus('Cambiando tono de ' + t.name + '… ' + Math.round(f * 100) + '%'); });
+              stats.shifted++;
             } catch (e) { shiftFailed = true; }
           } else shiftFailed = true;
         }
@@ -210,7 +213,7 @@
       tracks: trs, buffers: bufs, duration, shiftFailed,
       diff: duration - Math.min.apply(null, ds),
       mem: trs.reduce((a, t) => a + bufs[t.id].length * bufs[t.id].numberOfChannels * 4, 0),
-      secs: (performance.now() - t0) / 1000, fromPreload: false
+      secs: (performance.now() - t0) / 1000, fromPreload: false, stats
     };
   }
 
@@ -263,7 +266,9 @@
     buildMixer();
     ready = true;
     renderDownload();
-    const how = p.fromPreload ? ' · precargada' : (p.secs >= 1 ? ' · cargó en ' + p.secs.toFixed(1) + ' s' : '');
+    const st = p.stats || { net: 0, saved: 0, shifted: 0 };
+    const detail = [st.net ? st.net + ' bajadas de internet' : '', st.saved ? st.saved + ' desde lo guardado' : '', st.shifted ? 'tono en ' + st.shifted + ' pistas' : ''].filter(Boolean).join(', ');
+    const how = p.fromPreload ? ' · precargada' : (p.secs >= 1 ? ' · cargó en ' + p.secs.toFixed(1) + ' s' + (detail ? ' (' + detail + ')' : '') : '');
     if (p.diff > 0.05) status('Aviso: las pistas no miden lo mismo (' + p.diff.toFixed(2) + ' s de diferencia). Reexporta todas con la misma duración.', true);
     else if (p.shiftFailed) status('Aviso: no se pudo cambiar el tono; las pistas suenan en su tono original.', true);
     else if (p.mem > CONFIG.MEM_WARN_BYTES && isCoarse()) status('Lista, pero usa ~' + sizeText(p.mem) + ' de memoria. Si el celular se traba, exporta las pistas en mono.', true);
