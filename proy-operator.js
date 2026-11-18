@@ -148,6 +148,7 @@
           <label class="pj-fld">Letras máx. por diapositiva<input class="pj-in" type="number" min="30" max="300" step="10" data-set="maxChars"></label>
         </div>
         <button class="pj-btn sm block" id="pj-reslice" type="button">Aplicar a las canciones del orden</button>
+        <label class="pj-chk"><input type="checkbox" data-set="stopAtItemEnd"> Detenerse al terminar cada canción o cita (no pasar sola a lo siguiente)</label>
         <label class="pj-fld">Versículos por diapositiva (Biblia)<input class="pj-in" type="number" min="1" max="6" data-set="bibleVerses"></label>
         <p class="pj-help">Con 2 líneas y 90 letras cada diapositiva queda corta y de letra grande. Las canciones que ya están en el orden se actualizan con el botón (se pierden las ediciones manuales de sus diapositivas).</p>
 
@@ -278,13 +279,24 @@
         <span class="pj-slide-l">${esc(s.label)}${s.part ? ' · ' + esc(s.part) : ''}</span><span class="pj-slide-n">${j + 1}</span>
         <span class="pj-slide-t">${s.kind === 'countdown' || s.kind === 'media' ? body : esc(body)}</span></button>`;
     }).join('');
+    fitSlidesBox(box);
     box.scrollTop = prevTop;
     const l = box.querySelector('.live');
-    if (l) {                                   // solo se mueve el cuadro de diapositivas; la página (monitores) no se mueve
+    if (l) {                                   // primero se mueve el cuadro de diapositivas; la página solo si hace falta para que se vea la tarjeta
       const b = box.getBoundingClientRect(), r = l.getBoundingClientRect();
       if (r.top < b.top) box.scrollTop -= (b.top - r.top) + 4;
       else if (r.bottom > b.bottom) box.scrollTop += (r.bottom - b.bottom) + 4;
+      const r2 = l.getBoundingClientRect();
+      if (r2.bottom > window.innerHeight || r2.top < 0) l.scrollIntoView({ block: 'nearest' });
     }
+  }
+
+  /** El cuadro de diapositivas termina donde termina la ventana, para que la tarjeta en vivo nunca quede fuera de la pantalla */
+  function fitSlidesBox(box) {
+    box.style.maxHeight = '';
+    const top = box.getBoundingClientRect().top + window.scrollY;
+    const room = window.innerHeight - top - 16;
+    box.style.maxHeight = Math.max(150, Math.min(room, window.innerHeight * 0.6)) + 'px';
   }
 
   /** Agrega a la cita actual los siguientes versículos del mismo capítulo (una diapositiva por versículo) */
@@ -735,6 +747,7 @@
     $('pj-bible-add').onclick = () => { if (ui.lastBible) { addToService(JSON.parse(JSON.stringify(ui.lastBible)), false); toast('Cita agregada al orden'); } else bibleMsg('Aún no has proyectado ninguna cita.', true); };
     $('pj-bible-file').onclick = () => $('pj-bible-input').click();
     $('pj-bible-more').onclick = () => bibleMore(5);
+    window.addEventListener('resize', () => fitSlidesBox($('pj-slides')));
     $('pj-bible-sync').onclick = () => syncServerBibles(true);
     $('pj-reslice').onclick = () => {
       const n = C.resliceSongs((it) => allSongs().find((s) => String(s.id) === String(it.meta && it.meta.songId)), songOpts());
