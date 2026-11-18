@@ -56,7 +56,7 @@
   </div>
 
   <div class="pj-grid">
-    <aside class="pj-col">
+    <aside class="pj-col pj-left">
       <div class="pj-h">Orden del servicio</div>
       <input id="pj-svc-name" class="pj-in" type="text" maxlength="60" placeholder="Nombre del servicio" aria-label="Nombre del servicio">
       <div class="pj-row">
@@ -92,7 +92,7 @@
       <div class="pj-slides" id="pj-slides"></div>
     </section>
 
-    <aside class="pj-col">
+    <aside class="pj-col pj-right">
       <div class="pj-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" class="pj-tab" data-tab="${k}">${l}</button>`).join('')}</div>
 
       <div class="pj-panel" data-p="songs">
