@@ -222,11 +222,18 @@
     const out = {};
     const verses = (v) => {
       const o = {};
-      if (Array.isArray(v)) v.forEach((t, i) => { if (t != null && String(t).trim() !== '') o[i + 1] = String(t); });
+      if (Array.isArray(v)) v.forEach((t, i) => {
+        const isObj = t && typeof t === 'object';                       // [{ verse: "1", text: "..." }]
+        const txt = isObj ? t.text : t, n = isObj ? (Number(t.verse) || i + 1) : i + 1;
+        if (txt != null && String(txt).trim() !== '') o[n] = String(txt);
+      });
       else if (v && typeof v === 'object') Object.keys(v).forEach((k) => { if (!isNaN(Number(k)) && String(v[k]).trim() !== '') o[Number(k)] = String(v[k]); });
       return o;
     };
-    if (Array.isArray(ch)) ch.forEach((v, i) => { out[i + 1] = verses(v); });
+    if (Array.isArray(ch)) ch.forEach((v, i) => {
+      if (v && !Array.isArray(v) && Array.isArray(v.verses)) out[Number(v.chapter) || i + 1] = verses(v.verses);   // [{ chapter, verses: [...] }]
+      else out[i + 1] = verses(v);
+    });
     else if (ch && typeof ch === 'object') Object.keys(ch).forEach((k) => { if (!isNaN(Number(k))) out[Number(k)] = verses(ch[k]); });
     return out;
   }
@@ -331,9 +338,18 @@
     return out;
   }
 
+  /** Si un trozo tiene demasiado texto, lo parte por la mitad (las líneas largas ocupan más pantalla) */
+  function splitLong(chunk, maxChars) {
+    const len = chunk.reduce((n, l) => n + l.length, 0);
+    if (chunk.length < 2 || len <= maxChars) return [chunk];
+    const mid = Math.ceil(chunk.length / 2);
+    return splitLong(chunk.slice(0, mid), maxChars).concat(splitLong(chunk.slice(mid), maxChars));
+  }
+
   /** Letra -> diapositivas por sección. Una línea en blanco separa diapositivas; las secciones largas se parten solas. */
   function songToSlides(song, opts) {
-    const max = Math.max(1, (opts && opts.maxLines) || 4);
+    const max = Math.max(1, (opts && opts.maxLines) || 2);
+    const maxChars = Math.max(20, (opts && opts.maxChars) || 90);
     const lines = cleanText(lyricsOf(song)).split('\n');
     const secs = [];
     let cur = null;
@@ -357,7 +373,7 @@
       const groups = !s.label && !hasLabels ? blocks.map((b) => [b]) : [blocks];
       groups.forEach((g) => {
         const label = s.label || (hasLabels ? 'Letra' : 'Estrofa ' + (++auto));
-        const chunks = [].concat(...g.map((b) => balanced(b, max)));   // una sección puede dar varias diapositivas
+        const chunks = [].concat(...g.map((b) => [].concat(...balanced(b, max).map((x) => splitLong(x, maxChars)))));   // una sección puede dar varias diapositivas
         chunks.forEach((c, ci) => {
           slides.push({ id: uid(), kind: 'song', label, part: chunks.length > 1 ? (ci + 1) + '/' + chunks.length : '', color: sectionColor(label), text: c.join('\n') });
         });
@@ -416,7 +432,7 @@
   // Elementos del orden del servicio
   const Items = {
     song(song, opts) {
-      return { id: uid(), type: 'song', title: song.title || 'Canción', meta: { songId: String(song.id), source: song.source || 'local', key: song.key || song.originalKey || '' }, slides: songToSlides(song, opts) };
+      return { id: uid(), type: 'song', title: song.title || 'Canción', meta: { songId: String(song.id), source: song.source || 'local', key: song.key || song.originalKey || '', lyrics: lyricsOf(song) }, slides: songToSlides(song, opts) };
     },
     bible(ref, versionIds, opts) {
       const r = bibleSlides(ref, versionIds, opts);
@@ -443,7 +459,9 @@
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
     lower: { chroma: 'transparent', size: 100 },   // 'transparent' o un color de croma (#00FF00)
-    maxLines: 4,
+    maxLines: 2,                      // líneas por diapositiva de canción
+    maxChars: 90,                     // y máximo de letras por diapositiva
+    slideDefaults: 2,                 // versión de estos valores (sube para forzar los nuevos en instalaciones viejas)
     logoMediaId: null,
     countdown: { minutes: 5, label: 'Empezamos en' }
   };
@@ -652,6 +670,22 @@
     }
     const services = () => DB.all('services').then((l) => l.sort((a, b) => b.updated - a.updated));
 
+    /** Vuelve a partir las canciones del orden con los ajustes actuales (se pierden las ediciones manuales de esas diapositivas) */
+    function resliceSongs(getSong, sopts) {
+      let n = 0;
+      C.service.items.forEach((it, i) => {
+        if (it.type !== 'song') return;
+        const song = (getSong && getSong(it)) || (it.meta && it.meta.lyrics ? { title: it.title, lyrics: it.meta.lyrics } : null);
+        if (!song) return;
+        const slides = songToSlides(song, sopts);
+        if (!slides.length) return;
+        it.slides = slides; n++;
+        if (C.mode === 'service' && C.cursor && C.cursor.item === i) C.cursor.slide = Math.min(C.cursor.slide, slides.length - 1);
+      });
+      changed(n > 0 && C.mode === 'service' && !!C.cursor);
+      return n;
+    }
+
     function setSetting(path, value) { setPath(C.settings, path, value); changed(true); }
     function setStageMsg(t) { C.stageMsg = String(t || '').slice(0, 200); changed(true); }
 
@@ -670,6 +704,7 @@
 
     async function init() {
       const st = await DB.getMeta('settings', null);
+      if (st && st.slideDefaults !== DEFAULTS.slideDefaults) { st.maxLines = DEFAULTS.maxLines; st.maxChars = DEFAULTS.maxChars; st.slideDefaults = DEFAULTS.slideDefaults; }   // antes eran 4 líneas
       if (st) C.settings = mergeDeep(clone(DEFAULTS), st);
       const stored = await DB.all('bibles');
       stored.forEach((b) => Bible.add(b));
@@ -683,7 +718,7 @@
       init, onChange: (fn) => { subs.add(fn); return () => subs.delete(fn); }, emit, publish, liveState,
       list, current: () => at(C.cursor, list()), nextOf, prevOf, slidesOf,
       go, goQuick, next, prev, jumpItem, projectQuick, closeQuick, toggleFlag, startCountdown, stopCountdown,
-      editSlide, addItem, removeItem, moveItem, openService, newService, services, setSetting, setStageMsg,
+      editSlide, resliceSongs, addItem, removeItem, moveItem, openService, newService, services, setSetting, setStageMsg,
       connected, save: scheduleSave, changed
     });
     return C;
@@ -723,7 +758,7 @@
       for (const b of (json.bibles || [])) {
         try { const v = parseBibleFile(b, b.name); await DB.put('bibles', v); Bible.add(v); out.bibles++; } catch (e) { out.avisos.push('Biblia: ' + e.message); }
       }
-      const maxLines = (ctx && ctx.maxLines) || 4;
+      const maxLines = (ctx && ctx.maxLines) || 2;
       for (const sv of (json.services || [])) {
         const items = [];
         (sv.items || []).forEach((it) => {
