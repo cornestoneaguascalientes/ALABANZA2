@@ -88,7 +88,7 @@
         <textarea id="pj-edit-text" class="pj-in" rows="3" placeholder="Proyecta una diapositiva y corrígela aquí; la salida cambia al instante"></textarea>
         <label class="pj-inl">Tamaño de esta diapositiva <input id="pj-edit-size" type="range" min="40" max="180" value="100"> <output id="pj-edit-size-v">100%</output></label>
       </div>
-      <div class="pj-h"><span id="pj-slides-title">Diapositivas</span> <button class="pj-btn sm" id="pj-quick-add" type="button" hidden>+ Agregar al orden</button></div>
+      <div class="pj-h"><span id="pj-slides-title">Diapositivas</span> <span class="pj-h-btns"><button class="pj-btn sm" id="pj-bible-more" type="button" hidden>+ Más versículos</button> <button class="pj-btn sm" id="pj-quick-add" type="button" hidden>+ Agregar al orden</button></span></div>
       <div class="pj-slides" id="pj-slides"></div>
     </section>
 
@@ -148,6 +148,7 @@
           <label class="pj-fld">Letras máx. por diapositiva<input class="pj-in" type="number" min="30" max="300" step="10" data-set="maxChars"></label>
         </div>
         <button class="pj-btn sm block" id="pj-reslice" type="button">Aplicar a las canciones del orden</button>
+        <label class="pj-fld">Versículos por diapositiva (Biblia)<input class="pj-in" type="number" min="1" max="6" data-set="bibleVerses"></label>
         <p class="pj-help">Con 2 líneas y 90 letras cada diapositiva queda corta y de letra grande. Las canciones que ya están en el orden se actualizan con el botón (se pierden las ediciones manuales de sus diapositivas).</p>
 
         <div class="pj-h">Fondo detrás del texto</div>
@@ -215,7 +216,7 @@
     } catch (e) { return []; }
   }
   const allSongs = () => ui.localSongs.concat(librarySongs());
-  const bibleOpts = () => ({ maxChars: C.settings.bibleVersions.filter(Boolean).length > 1 ? 190 : 280, maxVerses: 4 });
+  const bibleOpts = () => ({ maxChars: C.settings.bibleVersions.filter(Boolean).length > 1 ? 190 : 280, maxVerses: Math.max(1, Number(C.settings.bibleVerses) || 1) });
   const songOpts = () => ({ maxLines: C.settings.maxLines || 2, maxChars: C.settings.maxChars || 90 });
 
   async function loadLocal() {
@@ -266,8 +267,10 @@
     const item = quickView ? C.quick.items[0] : C.service.items[ui.sel];
     $('pj-slides-title').textContent = quickView ? 'Cita rápida (fuera del orden)' : (item ? item.title : 'Diapositivas');
     $('pj-quick-add').hidden = !quickView;
+    $('pj-bible-more').hidden = !(item && item.type === 'bible' && item.meta && item.meta.ref);
     const box = $('pj-slides');
     if (!item) { box.innerHTML = '<div class="pj-empty">Elige un elemento del orden.</div>'; return; }
+    const prevTop = box.scrollTop;
     box.innerHTML = item.slides.map((s, j) => {
       const live = quickView ? (C.mode === 'quick' && C.cursor && C.cursor.slide === j) : (C.mode === 'service' && C.cursor && C.cursor.item === ui.sel && C.cursor.slide === j);
       const body = s.kind === 'bible' ? (s.versions || []).map((v) => v.text).join('\n— — —\n') : (s.kind === 'media' ? (s.mediaKind === 'video' ? '▶ Video' : '🖼 Imagen') : (s.kind === 'countdown' ? '⏱ ' + s.minutes + ' min · ' + esc(s.countdownLabel) : s.text));
@@ -275,8 +278,35 @@
         <span class="pj-slide-l">${esc(s.label)}${s.part ? ' · ' + esc(s.part) : ''}</span><span class="pj-slide-n">${j + 1}</span>
         <span class="pj-slide-t">${s.kind === 'countdown' || s.kind === 'media' ? body : esc(body)}</span></button>`;
     }).join('');
+    box.scrollTop = prevTop;
     const l = box.querySelector('.live');
-    if (l && l.scrollIntoView) l.scrollIntoView({ block: 'nearest' });
+    if (l) {                                   // solo se mueve el cuadro de diapositivas; la página (monitores) no se mueve
+      const b = box.getBoundingClientRect(), r = l.getBoundingClientRect();
+      if (r.top < b.top) box.scrollTop -= (b.top - r.top) + 4;
+      else if (r.bottom > b.bottom) box.scrollTop += (r.bottom - b.bottom) + 4;
+    }
+  }
+
+  /** Agrega a la cita actual los siguientes versículos del mismo capítulo (una diapositiva por versículo) */
+  function bibleMore(n) {
+    const quickView = C.mode === 'quick' && !ui.viewService;
+    const item = quickView ? (C.quick && C.quick.items[0]) : C.service.items[ui.sel];
+    if (!item || item.type !== 'bible' || !item.meta || !item.meta.ref) return;
+    const ref = item.meta.ref, ids = (item.meta.versions || []).filter((id) => Bible.versions[id]);
+    if (!ids.length) { toast('Esa Biblia ya no está cargada', 'error'); return; }
+    let all = [];
+    for (let i = 0; i < ids.length && !all.length; i++) all = Bible.getVerses(ids[i], { book: ref.book, chapter: ref.chapter, ranges: null }).map((v) => v.n);
+    const last = ref.ranges ? Math.max.apply(null, ref.ranges.map((r) => r[1])) : Math.max.apply(null, all.concat([0]));
+    const next = { book: ref.book, chapter: ref.chapter, ranges: [[last + 1, last + (n || 5)]] };
+    const r = P.Slides.bibleSlides(next, ids, bibleOpts());
+    if (r.error) { toast('No hay más versículos en este capítulo', 'error'); return; }
+    item.slides = item.slides.concat(r.slides);
+    const newLast = Math.max.apply(null, all.filter((v) => v > last && v <= last + (n || 5)));
+    ref.ranges = (ref.ranges || [[1, last]]).concat([[last + 1, newLast]]);
+    item.title = Bible.formatRef(ref, all.filter((v) => ref.ranges.some((x) => v >= x[0] && v <= x[1])));
+    C.changed(false);
+    render();
+    toast(r.slides.length + ' versículo(s) más');
   }
 
   function slideAtPick(p) {
@@ -704,6 +734,7 @@
     $('pj-bible-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bibleGo(e.target.value); } });
     $('pj-bible-add').onclick = () => { if (ui.lastBible) { addToService(JSON.parse(JSON.stringify(ui.lastBible)), false); toast('Cita agregada al orden'); } else bibleMsg('Aún no has proyectado ninguna cita.', true); };
     $('pj-bible-file').onclick = () => $('pj-bible-input').click();
+    $('pj-bible-more').onclick = () => bibleMore(5);
     $('pj-bible-sync').onclick = () => syncServerBibles(true);
     $('pj-reslice').onclick = () => {
       const n = C.resliceSongs((it) => allSongs().find((s) => String(s.id) === String(it.meta && it.meta.songId)), songOpts());
