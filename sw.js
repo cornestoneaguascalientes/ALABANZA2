@@ -9,13 +9,13 @@
  *   si no hay red, o tarda más de 3 s, se usa la copia guardada.
  * - Al cambiar este archivo, sube el número de SHELL (v3, v4…).
  */
-const SHELL = 'alabanza-shell-v4';
+const SHELL = 'alabanza-shell-v5';
 const FILES = [
   './', 'index.html', 'styles.css',
   'theme.js', 'music.js', 'ui.js', 'audio-core.js', 'database.js',
   'pads.js', 'metronome.js', 'perc.js', 'tuner.js', 'synth.js', 'pitchshift.js', 'multitrack.js', 'setlist.js',
   'proy-core.js', 'proy-render.js', 'proy-operator.js', 'proyeccion.css', 'salida.html', 'proyeccion-ejemplo.json', 'manifest.webmanifest',
-  'secuencias.json',
+  'secuencias.json', 'biblias.json',
   'logo_app.jpg', 'logo_app_2.png', 'logo_pagina.jpg', 'logo_pagina_2.jpg'
 ];
 
@@ -40,6 +40,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // Apps Script, fuentes, archive.org: pasan directo
+  if (url.pathname.indexOf('/biblias/') !== -1) return;   // Biblias (pesadas): se guardan en IndexedDB, no en este caché
 
   // Todo lo de la app: primero red (con revisión de que no esté viejo); sin red o con red lenta, la copia guardada
   e.respondWith(networkFirst(req, 3000));
