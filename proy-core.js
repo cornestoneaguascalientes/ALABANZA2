@@ -472,6 +472,7 @@
     bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0 },
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
+    stopAtItemEnd: true,              // al terminar las diapositivas de una canción/cita, se queda ahí (no pasa sola a lo siguiente)
     bibleVerses: 1,                   // versículos por diapositiva
     lower: { chroma: 'transparent', size: 100 },   // 'transparent' o un color de croma (#00FF00)
     maxLines: 2,                      // líneas por diapositiva de canción
@@ -520,8 +521,10 @@
     function liveState() {
       const items = list();
       const slide = at(C.cursor, items);
-      let nxt = nextOf(C.cursor, items), nextSlide = nxt ? at(nxt, items) : null;
-      if (!nextSlide && C.mode === 'quick' && C.anchor) { nxt = nextOf(C.anchor, C.service.items); nextSlide = nxt ? at(nxt, C.service.items) : null; }
+      let nxt = nextOf(C.cursor, items);
+      if (C.settings.stopAtItemEnd && nxt && C.cursor && nxt.item !== C.cursor.item) nxt = null;   // la vista previa tampoco salta al siguiente elemento
+      let nextSlide = nxt ? at(nxt, items) : null;
+      if (!nextSlide && !C.settings.stopAtItemEnd && C.mode === 'quick' && C.anchor) { nxt = nextOf(C.anchor, C.service.items); nextSlide = nxt ? at(nxt, C.service.items) : null; }
       const it = C.cursor && items[C.cursor.item];
       return {
         rev: ++C.rev, showN: C.showN, ts: Date.now(), slide, next: nextSlide, itemTitle: it ? it.title : '',
@@ -573,6 +576,11 @@
 
     function next() {
       const items = list();
+      if (C.settings.stopAtItemEnd && C.cursor) {     // solo avanza dentro del mismo elemento
+        const cur = C.cursor, n = cur.slide + 1;
+        if (items[cur.item] && n < slidesOf(items[cur.item]).length) show({ item: cur.item, slide: n });
+        return;
+      }
       const n = nextOf(C.cursor, items);
       if (n) { show(n); return; }
       if (C.mode === 'quick') {
@@ -585,6 +593,10 @@
 
     function prev() {
       const items = list();
+      if (C.settings.stopAtItemEnd && C.cursor) {
+        if (C.cursor.slide > 0) show({ item: C.cursor.item, slide: C.cursor.slide - 1 });
+        return;
+      }
       const p = prevOf(C.cursor, items);
       if (p) { show(p); return; }
       if (C.mode === 'quick') { const a = C.anchor; closeQuick(); C.anchor = null; if (a) show(a); }
