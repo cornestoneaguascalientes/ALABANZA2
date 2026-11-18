@@ -148,7 +148,10 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
 .pj-edit .pj-in { margin-bottom: 6px; }
 
 /* Diapositivas */
-.pj-slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+/* Las diapositivas se recorren dentro de su propio cuadro: la página y los monitores se quedan quietos */
+.pj-slides { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 44vh; overflow-y: auto; overscroll-behavior: contain; padding: 2px 4px 2px 2px; border: 1px solid var(--line); border-radius: 10px; }
+.pj-h-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 599px) { .pj-slides { max-height: 36vh; grid-template-columns: 1fr 1fr; } }
 .pj-slide { position: relative; text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 92px; padding: 8px 10px 8px 12px; border: 1px solid var(--line-2); border-left: 6px solid var(--c, #666); border-radius: 10px; background: var(--bg); color: var(--fg); }
 .pj-slide.live { outline: 2px solid #e5484d; background: var(--s2); }
 .pj-slide.picked { outline: 2px dashed #3fb950; }
