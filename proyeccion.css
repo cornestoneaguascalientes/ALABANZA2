@@ -77,6 +77,8 @@
 .pj { display: flex; flex-direction: column; gap: 10px; padding-bottom: 40px; }
 .pj button { cursor: pointer; }
 .pj-bar, .pj-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pj-quick #pj-cd-label { flex: 1 1 140px; min-width: 120px; width: auto; }
+@media (max-width: 599px) { .pj-sep { display: none; } .pj-bar .pj-btn, .pj-quick .pj-btn { flex: 1 1 auto; } .pj-clock { font-size: 18px; } }
 .pj-grow { flex: 1; }
 .pj-sep { width: 1px; height: 26px; background: var(--line-2); margin: 0 4px; }
 .pj-clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 64px; }
@@ -98,6 +100,8 @@
 textarea.pj-in { resize: vertical; line-height: 1.35; }
 input[type="color"].pj-in { padding: 2px; height: 36px; }
 .pj-inl, .pj-chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.pj-inl input[type="range"], .pj-fld input[type="range"] { flex: 1; width: auto; min-width: 90px; }
+.pj-inl output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
 .pj-chk input { width: 18px; height: 18px; }
 .pj-fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-top: 8px; flex: 1; min-width: 0; }
 .pj-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; flex-wrap: wrap; }
@@ -109,9 +113,12 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
 .pj-help.bad { color: #ff6b6b; }
 .pj-empty { font-size: 13px; color: var(--dim); padding: 12px 4px; list-style: none; }
 
-.pj-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr) 350px; gap: 12px; align-items: start; }
-@media (max-width: 1150px) { .pj-grid { grid-template-columns: 1fr; } }
-.pj-col { background: var(--s1); border: 1px solid var(--line); border-radius: 14px; padding: 12px; min-width: 0; }
+/* Cuadrícula: celular = una columna (primero monitores y diapositivas); laptop = orden + centro, panel abajo; pantalla grande = 3 columnas */
+.pj-grid { display: grid; gap: 12px; align-items: start; grid-template-columns: minmax(0, 1fr); grid-template-areas: "center" "left" "right"; }
+.pj-left { grid-area: left; } .pj-center { grid-area: center; } .pj-right { grid-area: right; }
+@media (min-width: 900px) { .pj-grid { grid-template-columns: 240px minmax(0, 1fr); grid-template-areas: "left center" "right right"; } }
+@media (min-width: 1280px) { .pj-grid { grid-template-columns: 230px minmax(0, 1fr) 310px; grid-template-areas: "left center right"; } }
+.pj-col { background: var(--s1); border: 1px solid var(--line); border-radius: 14px; padding: 12px; min-width: 0; overflow: hidden; }
 
 /* Orden del servicio */
 .pj-items { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-height: 52vh; overflow: auto; }
@@ -130,8 +137,11 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
 
 /* Monitores */
 .pj-mons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pj-mons > div { min-width: 0; }
+@media (max-width: 599px) { .pj-mons { grid-template-columns: 1fr; } }
 .pj-mon-t { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px; }
 .pj-mon-t.live { color: #e5484d; }
+.pj-mon.pr-root { height: auto; }
 .pj-mon { position: relative; width: 100%; aspect-ratio: 16 / 9; border: 2px solid var(--line-2); border-radius: 8px; overflow: hidden; background: #000; }
 .pj-mon.live { border-color: #e5484d; }
 .pj-edit { margin-top: 8px; padding: 6px 0; }
@@ -142,7 +152,7 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
 .pj-slide { position: relative; text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 92px; padding: 8px 10px 8px 12px; border: 1px solid var(--line-2); border-left: 6px solid var(--c, #666); border-radius: 10px; background: var(--bg); color: var(--fg); }
 .pj-slide.live { outline: 2px solid #e5484d; background: var(--s2); }
 .pj-slide.picked { outline: 2px dashed #3fb950; }
-.pj-slide-l { font-size: 11px; font-weight: 700; color: var(--c); }
+.pj-slide-l { font-size: 11px; font-weight: 700; color: var(--c); padding-right: 22px; overflow-wrap: anywhere; }
 .pj-slide-n { position: absolute; top: 6px; right: 8px; font-size: 10px; color: var(--dim); }
 .pj-slide-t { font-size: 13px; line-height: 1.3; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -176,3 +186,10 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
 .pj-dlg { width: min(640px, 94vw); border: 1px solid var(--line-2); border-radius: 14px; background: var(--s1); color: var(--fg); padding: 16px; }
 .pj-dlg::backdrop { background: rgba(0,0,0,.6); }
 .pj-dlg .pj-in { margin-top: 8px; }
+
+/* Barra de navegación inferior (celular): con 5 botones las etiquetas largas se encimaban */
+@media (max-width: 899px) {
+  .nav-btn { min-width: 0; padding: 0 2px; font-size: 11px; }
+  .nav-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+@media (max-width: 359px) { .nav-btn { font-size: 10px; } }
