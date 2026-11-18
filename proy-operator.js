@@ -115,6 +115,7 @@
         <ul class="pj-list" id="pj-bible-results"></ul>
         <div class="pj-row">
           <button class="pj-btn sm" id="pj-bible-add" type="button">+ Agregar última cita al orden</button>
+          <button class="pj-btn sm" id="pj-bible-sync" type="button">Buscar Biblias del servidor</button>
           <button class="pj-btn sm" id="pj-bible-file" type="button">Cargar Biblia (JSON)…</button>
           <input id="pj-bible-input" type="file" accept=".json,application/json" hidden>
         </div>
@@ -142,7 +143,12 @@
         <label class="pj-fld">Tamaño <input type="range" min="50" max="160" data-set="text.size"></label>
         <label class="pj-chk"><input type="checkbox" data-set="text.shadow"> Sombra</label>
         <label class="pj-chk"><input type="checkbox" data-set="text.uppercase"> Todo en mayúsculas</label>
-        <label class="pj-fld">Líneas por diapositiva (canciones nuevas)<input class="pj-in" type="number" min="1" max="8" data-set="maxLines"></label>
+        <div class="pj-grid2">
+          <label class="pj-fld">Líneas por diapositiva<input class="pj-in" type="number" min="1" max="8" data-set="maxLines"></label>
+          <label class="pj-fld">Letras máx. por diapositiva<input class="pj-in" type="number" min="30" max="300" step="10" data-set="maxChars"></label>
+        </div>
+        <button class="pj-btn sm block" id="pj-reslice" type="button">Aplicar a las canciones del orden</button>
+        <p class="pj-help">Con 2 líneas y 90 letras cada diapositiva queda corta y de letra grande. Las canciones que ya están en el orden se actualizan con el botón (se pierden las ediciones manuales de sus diapositivas).</p>
 
         <div class="pj-h">Fondo detrás del texto</div>
         <div class="pj-help" id="pj-bg-name">Fondo: color liso</div>
@@ -210,7 +216,7 @@
   }
   const allSongs = () => ui.localSongs.concat(librarySongs());
   const bibleOpts = () => ({ maxChars: C.settings.bibleVersions.filter(Boolean).length > 1 ? 190 : 280, maxVerses: 4 });
-  const songOpts = () => ({ maxLines: C.settings.maxLines || 4 });
+  const songOpts = () => ({ maxLines: C.settings.maxLines || 2, maxChars: C.settings.maxChars || 90 });
 
   async function loadLocal() {
     ui.localSongs = (await DB.all('songs')).map((s) => Object.assign({ source: 'local' }, s)).sort((a, b) => a.title.localeCompare(b.title));
@@ -332,7 +338,7 @@
     });
     $('pj-bible-versions').innerHTML = list.length ? list.map((v) =>
       `<li class="pj-song" data-id="${esc(v.id)}"><span class="pj-song-t">${esc(v.name)}</span><span class="pj-tag local">${esc(v.short)}</span><span class="pj-song-b"><button type="button" data-act="rename" aria-label="Cambiar nombre corto">✎</button><button type="button" data-act="del" aria-label="Quitar">✕</button></span></li>`).join('')
-      : '<li class="pj-empty">No hay ninguna Biblia cargada. Usa «Cargar Biblia (JSON)…» o carga los datos de ejemplo.</li>';
+      : '<li class="pj-empty">No hay ninguna Biblia cargada. Prueba «Buscar Biblias del servidor» (necesita biblias.json y la carpeta biblias/ en tu sitio), «Cargar Biblia (JSON)…», o los datos de ejemplo.</li>';
   }
 
   function renderBibleResults() {
@@ -453,6 +459,38 @@
       toast(v.name + ': ' + n + ' versículos cargados');
       renderBibleVersions();
     } catch (e) { toast('No se pudo leer la Biblia: ' + e.message, 'error'); }
+  }
+
+  /** Descarga las Biblias que lista biblias.json (están en la carpeta biblias/ del sitio) y las guarda en este dispositivo */
+  let bibleSyncing = false;
+  async function syncServerBibles(manual) {
+    if (bibleSyncing) return;
+    bibleSyncing = true;
+    try {
+      let list = null;
+      try {
+        const r = await fetch('biblias.json', { cache: 'no-cache' });
+        if (r.ok) list = (await r.json()).biblias || [];
+      } catch (e) { /* sin red o sin archivo */ }
+      if (!list || !list.length) { if (manual) toast('No encontré biblias.json en el servidor. Revisa que lo hayas subido junto con la carpeta biblias/', 'error'); return; }
+      let added = 0;
+      for (const e of list) {
+        const id = e.id || (e.short || e.file || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        if (Bible.versions[id]) continue;                       // ya está en este dispositivo
+        try {
+          const r = await fetch('biblias/' + e.file);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const v = Bible.parseBibleFile(await r.json(), e.name || e.file);
+          v.id = id; if (e.name) v.name = e.name; if (e.short) v.short = e.short;
+          await DB.put('bibles', v);
+          Bible.add(v); added++;
+          if (!C.settings.bibleVersions[0]) C.setSetting('bibleVersions.0', v.id);
+        } catch (x) { if (manual || !Bible.list().length) toast('No se pudo cargar ' + (e.name || e.file) + ': ' + x.message, 'error'); }
+      }
+      renderBibleVersions(); syncSettings();
+      if (added) toast(added + ' Biblia(s) lista(s)');
+      else if (manual) toast('Ya tienes todas las Biblias del servidor');
+    } finally { bibleSyncing = false; }
   }
 
   async function makeThumb(file, kind) {
@@ -665,6 +703,12 @@
     $('pj-bible-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bibleGo(e.target.value); } });
     $('pj-bible-add').onclick = () => { if (ui.lastBible) { addToService(JSON.parse(JSON.stringify(ui.lastBible)), false); toast('Cita agregada al orden'); } else bibleMsg('Aún no has proyectado ninguna cita.', true); };
     $('pj-bible-file').onclick = () => $('pj-bible-input').click();
+    $('pj-bible-sync').onclick = () => syncServerBibles(true);
+    $('pj-reslice').onclick = () => {
+      const n = C.resliceSongs((it) => allSongs().find((s) => String(s.id) === String(it.meta && it.meta.songId)), songOpts());
+      render();
+      toast(n ? n + ' canción(es) actualizadas' : 'No hay canciones en el orden para actualizar', n ? undefined : 'error');
+    };
     $('pj-bible-input').onchange = async (e) => { for (const f of Array.from(e.target.files)) await loadBibleFile(f); e.target.value = ''; };
     $('pj-bible-results').addEventListener('click', (e) => {
       const li = e.target.closest('.pj-song');
@@ -802,6 +846,7 @@
     switchTab('songs');
     syncSettings();
     renderSongs(); renderBibleVersions(); renderBibleResults(); renderMedia();
+    syncServerBibles(false);        // si falta alguna Biblia del servidor, se baja sola (una vez por dispositivo)
     C.onChange(render);
     render();
     setInterval(tickBar, 1000); tickBar();
