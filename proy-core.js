@@ -222,6 +222,14 @@
     const out = {};
     const verses = (v) => {
       const o = {};
+      if (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.items)) {      // { items: [{ type: 'verse', verse_numbers: [1], lines: [...] }] }
+        v.items.forEach((it) => {
+          if (!it || it.type !== 'verse' || !it.verse_numbers || !it.verse_numbers.length) return;
+          const t = (it.lines || []).join(' ').replace(/\s+/g, ' ').trim();
+          if (t) it.verse_numbers.forEach((n) => { o[Number(n)] = t; });
+        });
+        return o;
+      }
       if (Array.isArray(v)) v.forEach((t, i) => {
         const isObj = t && typeof t === 'object';                       // [{ verse: "1", text: "..." }]
         const txt = isObj ? t.text : t, n = isObj ? (Number(t.verse) || i + 1) : i + 1;
@@ -231,7 +239,8 @@
       return o;
     };
     if (Array.isArray(ch)) ch.forEach((v, i) => {
-      if (v && !Array.isArray(v) && Array.isArray(v.verses)) out[Number(v.chapter) || i + 1] = verses(v.verses);   // [{ chapter, verses: [...] }]
+      if (v && !Array.isArray(v) && Array.isArray(v.items)) out[i + 1] = verses(v);
+      else if (v && !Array.isArray(v) && Array.isArray(v.verses)) out[Number(v.chapter) || i + 1] = verses(v.verses);   // [{ chapter, verses: [...] }]
       else out[i + 1] = verses(v);
     });
     else if (ch && typeof ch === 'object') Object.keys(ch).forEach((k) => { if (!isNaN(Number(k))) out[Number(k)] = verses(ch[k]); });
@@ -245,12 +254,16 @@
   function parseBibleFile(data, fallbackName) {
     let books = null, name = fallbackName || 'Biblia', short = '', id = '';
     if (Array.isArray(data)) books = data;
-    else if (data && Array.isArray(data.books)) { books = data.books; name = data.name || name; short = data.short || data.version || ''; id = data.id || ''; }
+    else if (data && Array.isArray(data.books)) {
+      books = data.books; name = data.name || data.local_title || name; short = data.short || data.version || data.local_abbreviation || ''; id = data.id || '';
+      if (!id && data.version_id) id = String(data.local_abbreviation || 'biblia').toLowerCase().replace(/[^a-z0-9]+/g, '') + '-' + data.version_id;   // dos versiones con la misma sigla no se pisan
+      if (/castellano/i.test(String(data.local_title || ''))) short = (short || 'NVI') + '-ES';
+    }
     else if (data && typeof data === 'object') books = Object.keys(data).map((k) => ({ name: k, chapters: data[k] }));
     if (!books || !books.length) throw new Error('El archivo no parece una Biblia en JSON');
     const out = {};
     books.forEach((b, pos) => {
-      const byName = resolveBook(b.name || b.book || '');
+      const byName = resolveBook(b.name || b.book || b.human || '');
       const byAbbr = resolveBook(b.abbrev || b.id || '');
       let idx = byName && byName.idx != null ? byName.idx : (byAbbr && byAbbr.idx != null ? byAbbr.idx : (books.length === 66 ? pos : -1));
       if (idx < 0 || idx > 65) return;
@@ -275,7 +288,8 @@
       if (!chap) return [];
       const nums = Object.keys(chap).map(Number).sort((a, b) => a - b);
       const pick = ref.ranges ? nums.filter((n) => ref.ranges.some(([a, b]) => n >= a && n <= b)) : nums;
-      return pick.map((n) => ({ n, text: chap[n] }));
+      // versículos unidos (p. ej. TLA) traen el mismo texto en cada número: se muestra una sola vez
+      return pick.filter((n, i) => i === 0 || chap[n] !== chap[pick[i - 1]]).map((n) => ({ n, text: chap[n] }));
     },
     /** Búsqueda por palabras (todas deben aparecer, sin importar acentos ni mayúsculas) */
     search(versionId, query, limit) {
