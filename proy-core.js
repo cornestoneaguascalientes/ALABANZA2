@@ -451,7 +451,7 @@
     bible(ref, versionIds, opts) {
       const r = bibleSlides(ref, versionIds, opts);
       if (r.error) return { error: r.error };
-      return { id: uid(), type: 'bible', title: r.title, meta: { versions: versionIds.filter(Boolean) }, slides: r.slides };
+      return { id: uid(), type: 'bible', title: r.title, meta: { versions: versionIds.filter(Boolean), ref: JSON.parse(JSON.stringify(ref)) }, slides: r.slides };
     },
     text(title, text) { return { id: uid(), type: 'text', title: title || 'Texto', meta: {}, slides: textToSlides(text, title || 'Texto') }; },
     countdown(minutes, label) {
@@ -472,6 +472,7 @@
     bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0 },
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
+    bibleVerses: 1,                   // versículos por diapositiva
     lower: { chroma: 'transparent', size: 100 },   // 'transparent' o un color de croma (#00FF00)
     maxLines: 2,                      // líneas por diapositiva de canción
     maxChars: 90,                     // y máximo de letras por diapositiva
