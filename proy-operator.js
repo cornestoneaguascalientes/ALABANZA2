@@ -117,7 +117,7 @@
           <button class="pj-btn sm" id="pj-bible-add" type="button">+ Agregar última cita al orden</button>
           <button class="pj-btn sm" id="pj-bible-sync" type="button">Buscar Biblias del servidor</button>
           <button class="pj-btn sm" id="pj-bible-file" type="button">Cargar Biblia (JSON)…</button>
-          <input id="pj-bible-input" type="file" accept=".json,application/json" hidden>
+          <input id="pj-bible-input" type="file" multiple accept=".json,application/json" hidden>
         </div>
         <ul class="pj-list" id="pj-bible-versions"></ul>
       </div>
@@ -477,6 +477,7 @@
       for (const e of list) {
         const id = e.id || (e.short || e.file || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
         if (Bible.versions[id]) continue;                       // ya está en este dispositivo
+        if (!manual && e.auto === false) continue;              // las marcadas auto:false solo se bajan con el botón
         try {
           const r = await fetch('biblias/' + e.file);
           if (!r.ok) throw new Error('HTTP ' + r.status);
