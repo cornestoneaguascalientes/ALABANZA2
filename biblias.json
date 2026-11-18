@@ -1,0 +1,6 @@
+{
+  "_nota": "Lista de Biblias que la app baja sola (una vez por dispositivo). Sube cada archivo JSON a la carpeta biblias/ y agrégalo aquí.",
+  "biblias": [
+    { "id": "rv1909", "file": "rv1909.json", "name": "Reina-Valera 1909", "short": "RV1909" }
+  ]
+}
