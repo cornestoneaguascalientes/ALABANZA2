@@ -225,7 +225,10 @@
       if (v && typeof v === 'object' && !Array.isArray(v) && Array.isArray(v.items)) {      // { items: [{ type: 'verse', verse_numbers: [1], lines: [...] }] }
         v.items.forEach((it) => {
           if (!it || it.type !== 'verse' || !it.verse_numbers || !it.verse_numbers.length) return;
-          const t = (it.lines || []).join(' ').replace(/\s+/g, ' ').trim();
+          let t = (it.lines || []).join(' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();   // quita etiquetas sueltas como <note>
+          // Algunas ediciones (p. ej. TLA) traen el número del versículo pegado al texto: "1 (2) Jacob…" o "23 En el año…"
+          const m = t.match(/^(\d+)(\s*\([^)]*\))?\s+(\S[\s\S]*)$/);
+          if (m && (m[2] || it.verse_numbers.indexOf(Number(m[1])) !== -1)) t = m[3];
           if (t) it.verse_numbers.forEach((n) => { o[Number(n)] = t; });
         });
         return o;
