@@ -536,7 +536,7 @@
         rev: ++C.rev, showN: C.showN, ts: Date.now(), slide, next: nextSlide, itemTitle: it ? it.title : '',
         position: C.cursor ? { item: C.cursor.item + 1, items: items.length, slide: C.cursor.slide + 1, slides: slidesOf(it).length } : null,
         flags: Object.assign({}, C.flags), countdown: C.countdown, stageMsg: C.stageMsg,
-        settings: { text: C.settings.text, bg: C.settings.bg, bibleLayout: C.settings.bibleLayout, lower: C.settings.lower, logoMediaId: C.settings.logoMediaId }
+        settings: { text: C.settings.text, bg: C.settings.bg, bibleLayout: C.settings.bibleLayout, lower: C.settings.lower, logoMediaId: C.settings.logoMediaId, cdFinal: !!C.settings.cdFinal }
       };
     }
 
