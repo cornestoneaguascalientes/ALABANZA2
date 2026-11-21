@@ -40,6 +40,24 @@
 .pr-cd-l { font-size: 6cqmin; font-weight: 600; opacity: .9; text-shadow: 0 .05em .15em rgba(0,0,0,.8); }
 .pr-cd-t { font-size: 26cqmin; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 .04em .12em rgba(0,0,0,.8); }
 
+/* Cuenta regresiva: últimos 10 segundos (opcional) — el número crece, aparece con un "pop" y se desvanece cada segundo */
+.pr-cd.final { background: radial-gradient(circle at center, rgba(0,0,0,.5) 0%, rgba(0,0,0,.92) 80%); gap: 0; }
+.pr-cd.final .pr-cd-l { font-size: 5cqmin; letter-spacing: .22em; text-transform: uppercase; opacity: .85; }
+.pr-cd.final .pr-cd-t { position: relative; font-size: 64cqmin; font-weight: 900; letter-spacing: -.02em; color: #fff; text-shadow: 0 0 5cqmin rgba(255,255,255,.55), 0 .04em .12em rgba(0,0,0,.8); }
+.pr-cd.final.lv-b .pr-cd-t { color: #ffd166; text-shadow: 0 0 6cqmin rgba(255,209,102,.7), 0 .04em .12em rgba(0,0,0,.8); }
+.pr-cd.final.lv-c .pr-cd-t { color: #ff5d5d; text-shadow: 0 0 7cqmin rgba(255,93,93,.8), 0 .04em .12em rgba(0,0,0,.8); }
+.pr-cd.final .pr-cd-t::after { content: ""; position: absolute; left: 50%; top: 50%; width: 46cqmin; height: 46cqmin; margin: -23cqmin 0 0 -23cqmin; border: 1cqmin solid currentColor; border-radius: 50%; opacity: 0; pointer-events: none; }
+.pr-cd.final .pr-cd-t.pop { animation: pr-pop .95s cubic-bezier(.2, .9, .25, 1) both; }
+.pr-cd.final .pr-cd-t.pop::after { animation: pr-ring .95s ease-out both; }
+@keyframes pr-pop {
+  0% { transform: scale(1.7); opacity: 0; filter: blur(1.2cqmin); }
+  16% { transform: scale(1); opacity: 1; filter: blur(0); }
+  68% { transform: scale(.96); opacity: 1; }
+  100% { transform: scale(.72); opacity: 0; }
+}
+@keyframes pr-ring { 0% { transform: scale(.55); opacity: .75; } 100% { transform: scale(1.6); opacity: 0; } }
+.ps-cd.ps-cd-final { color: #ff5d5d; font-weight: 800; font-size: 7cqmin; }
+
 /* Pantalla negra: transición suave */
 .pr-black { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity .7s ease; pointer-events: none; }
 .pr-black.on { opacity: 1; }
