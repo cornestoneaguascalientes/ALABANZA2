@@ -475,6 +475,7 @@
     bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0 },
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
+    cdFinal: true,                    // cuenta regresiva: últimos 10 segundos en grande y animados
     stopAtItemEnd: true,              // al terminar las diapositivas de una canción/cita, se queda ahí (no pasa sola a lo siguiente)
     bibleVerses: 1,                   // versículos por diapositiva
     lower: { chroma: 'transparent', size: 100 },   // 'transparent' o un color de croma (#00FF00)
