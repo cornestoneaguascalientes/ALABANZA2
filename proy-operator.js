@@ -426,12 +426,35 @@
   // ============================================================
   // Acciones
   // ============================================================
-  function openOutput(mode) {
-    const feat = (mode === 'escenario' ? 'popup=yes,width=960,height=540' : 'popup=yes,width=1280,height=720') + ',menubar=no,toolbar=no,location=no,status=no';
-    const w = window.open('salida.html?modo=' + mode, 'alabanza-salida-' + mode, feat);
-    if (!w) { toast('El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio y vuelve a intentar.', 'error'); return; }
+  /** Busca la pantalla extendida (proyector). Chrome/Edge piden un permiso la primera vez ("administrar ventanas"). */
+  async function pickExternalScreen(mode) {
+    if (mode === 'lower' || !window.getScreenDetails) return null;
+    if (window.screen && window.screen.isExtended === false) return null;       // solo hay una pantalla
+    try {
+      const d = await window.getScreenDetails();
+      const ext = d.screens.filter((s) => s !== d.currentScreen);                // las que NO son donde está la consola
+      if (!ext.length) return null;
+      return ext[mode === 'escenario' && ext.length > 1 ? 1 : 0];               // escenario: una tercera pantalla si existe
+    } catch (e) { return null; }                                                 // permiso negado o no disponible
+  }
+
+  async function openOutput(mode) {
+    const url = 'salida.html?modo=' + mode, name = 'alabanza-salida-' + mode;
+    const tail = ',menubar=no,toolbar=no,location=no,status=no';
+    const scr = await pickExternalScreen(mode);
+    let feat = (mode === 'escenario' ? 'popup=yes,width=960,height=540' : 'popup=yes,width=1280,height=720') + tail;
+    if (scr) {
+      const L = scr.availLeft != null ? scr.availLeft : scr.left, T = scr.availTop != null ? scr.availTop : scr.top;
+      const W = scr.availWidth || scr.width, H = scr.availHeight || scr.height;
+      feat = 'popup=yes,left=' + L + ',top=' + T + ',width=' + W + ',height=' + H + tail;
+    }
+    const w = window.open(url, name, feat);
+    if (!w) { toast('El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio y vuelve a tocar el botón.', 'error'); return; }
+    if (scr) { try { w.moveTo(scr.availLeft != null ? scr.availLeft : scr.left, scr.availTop != null ? scr.availTop : scr.top); } catch (e) { /* noop */ } }
     w.focus();
-    if (mode === 'pantalla') toast('Arrastra la ventana al proyector y presiona F11 (o doble clic) para pantalla completa');
+    if (mode === 'lower') return;
+    toast(scr ? 'Se abrió en la otra pantalla. Haz un clic en ella para ponerla en pantalla completa'
+              : 'Arrástrala al proyector y haz un clic en ella para pantalla completa');
   }
 
   function addToService(item, andGo) {
