@@ -27,7 +27,7 @@
       salida.html?modo=escenario  Vista de escenario: letra actual, siguiente y reloj
   -->
   <div id="out"></div>
-  <div id="hint">Esperando al operador… Doble clic (o F) = pantalla completa</div>
+  <div id="hint">Esperando al operador… Haz un clic aquí para pantalla completa (F = alternar)</div>
 
   <script src="proy-core.js"></script>
   <script src="proy-render.js"></script>
@@ -68,13 +68,28 @@
       hello();
       setInterval(hello, 3000);
 
-      // Pantalla completa: doble clic, F o F11
-      function toggleFs() {
-        if (!document.fullscreenElement) { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {}); }
-        else document.exitFullscreen();
+      // Pantalla completa: un clic la activa (así se esconde la barra de la ventana). F la alterna; Esc sale.
+      var fsAt = 0;
+      function enterFs() {
+        var el = document.documentElement;
+        if (!document.fullscreenElement && el.requestFullscreen) {
+          fsAt = Date.now();
+          el.requestFullscreen({ navigationUI: 'hide' }).catch(function () { el.requestFullscreen().catch(function () {}); });
+        }
       }
-      addEventListener('dblclick', toggleFs);
+      function toggleFs() { if (!document.fullscreenElement) enterFs(); else document.exitFullscreen(); }
+      addEventListener('click', enterFs);
+      addEventListener('dblclick', function () { if (document.fullscreenElement && Date.now() - fsAt > 1200) document.exitFullscreen(); });
       addEventListener('keydown', function (e) { if (e.key === 'f' || e.key === 'F') toggleFs(); });
+      // Si sale de pantalla completa sin querer (y no es el Lower Third), avisa: un clic la vuelve a poner
+      document.addEventListener('fullscreenchange', function () {
+        if (mode === 'lower') return;
+        if (!document.fullscreenElement) {
+          hint.textContent = 'Un clic = pantalla completa';
+          hint.classList.remove('off');
+          setTimeout(function () { if (!document.fullscreenElement) hint.classList.add('off'); }, 6000);
+        }
+      });
 
       // El cursor se oculta solo a los 2 s sin moverlo
       var t = null;
