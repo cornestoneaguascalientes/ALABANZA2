@@ -148,6 +148,9 @@
           <label class="pj-fld">Letras máx. por diapositiva<input class="pj-in" type="number" min="30" max="300" step="10" data-set="maxChars"></label>
         </div>
         <button class="pj-btn sm block" id="pj-reslice" type="button">Aplicar a las canciones del orden</button>
+        <label class="pj-fld">Al llegar a cero la cuenta regresiva<select class="pj-in" data-set="cdAfter" id="pj-cd-after"><option value="none">No hacer nada (se oculta sola)</option><option value="logo">Mostrar el logo</option><option value="black">Pantalla negra</option><option value="next">Pasar al siguiente elemento del orden</option><option value="media">Mostrar una imagen o video…</option></select></label>
+        <label class="pj-fld" id="pj-cd-media-wrap" hidden>Imagen o video<select class="pj-in" data-set="cdAfterMediaId" id="pj-cd-media"></select></label>
+        <p class="pj-help">«Siguiente elemento» funciona cuando la cuenta regresiva es parte del orden del servicio. Las imágenes y videos se agregan en la pestaña Media.</p>
         <label class="pj-chk"><input type="checkbox" data-set="cdFinal"> Cuenta regresiva: últimos 10 segundos grandes y animados (10, 9, 8…)</label>
         <label class="pj-chk"><input type="checkbox" data-set="stopAtItemEnd"> Detenerse al terminar cada canción o cita (no pasar sola a lo siguiente)</label>
         <label class="pj-fld">Versículos por diapositiva (Biblia)<input class="pj-in" type="number" min="1" max="6" data-set="bibleVerses"></label>
@@ -392,6 +395,7 @@
   }
 
   function renderMedia() {
+    renderCdMedia();
     const bg = C.settings.bg.mediaId, lg = C.settings.logoMediaId;
     $('pj-thumbs').innerHTML = ui.media.length ? ui.media.map((m) =>
       `<div class="pj-thumb" data-id="${esc(m.id)}">
@@ -407,7 +411,17 @@
     $('pj-bg-name').textContent = m ? 'Fondo: ' + m.name + (m.kind === 'video' ? ' (video en bucle)' : '') : 'Fondo: color liso';
   }
 
+  /** Llena la lista de imágenes/videos para «Al llegar a cero → mostrar una imagen o video» */
+  function renderCdMedia() {
+    const sel = $('pj-cd-media');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(elige un archivo)</option>' + ui.media.map((m) => '<option value="' + esc(m.id) + '">' + (m.kind === 'video' ? '▶ ' : '🖼 ') + esc(m.name) + '</option>').join('');
+    sel.value = C.settings.cdAfterMediaId || '';
+    $('pj-cd-media-wrap').hidden = C.settings.cdAfter !== 'media';
+  }
+
   function syncSettings() {
+    renderCdMedia();
     root.querySelectorAll('[data-set]').forEach((el) => {
       const v = getPath(C.settings, el.dataset.set);
       if (el.type === 'checkbox') el.checked = !!v;
@@ -830,6 +844,7 @@
       el.addEventListener('input', apply);
       el.addEventListener('change', apply);
     });
+    $('pj-cd-after').addEventListener('change', () => { $('pj-cd-media-wrap').hidden = $('pj-cd-after').value !== 'media'; });
     $('pj-stage-send').onclick = () => C.setStageMsg($('pj-stage-msg').value);
     $('pj-stage-clear').onclick = () => { $('pj-stage-msg').value = ''; C.setStageMsg(''); };
 
@@ -898,6 +913,7 @@
     root.innerHTML = template();
     ch = P.channel();
     C = P.createController({ channel: ch });
+    C.getMedia = (id) => ui.media.find((m) => m.id === id) || null;
     await C.init();
     await loadLocal();
 
