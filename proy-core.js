@@ -475,6 +475,8 @@
     bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0 },
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
+    cdAfter: 'logo',                  // qué pasa al llegar a cero: none | logo | black | next | media
+    cdAfterMediaId: null,
     cdFinal: true,                    // cuenta regresiva: últimos 10 segundos en grande y animados
     stopAtItemEnd: true,              // al terminar las diapositivas de una canción/cita, se queda ahí (no pasa sola a lo siguiente)
     bibleVerses: 1,                   // versículos por diapositiva
@@ -642,6 +644,30 @@
     }
     function stopCountdown() { C.countdown = null; changed(true); }
 
+    /** Al llegar a cero (con una breve pausa para ver el "0") hace lo que se eligió en Ajustes */
+    function afterCountdown() {
+      const a = C.settings.cdAfter || 'none';
+      if (a === 'none') return;
+      C.countdown = null;
+      if (a === 'logo') C.flags = { black: false, clear: false, logo: true };
+      else if (a === 'black') C.flags = { black: true, clear: false, logo: false };
+      else if (a === 'next') {
+        if (C.mode === 'service' && C.cursor && C.service.items[C.cursor.item + 1]) { go(C.cursor.item + 1, 0); return; }
+      } else if (a === 'media') {
+        const rec = C.settings.cdAfterMediaId && C.getMedia ? C.getMedia(C.settings.cdAfterMediaId) : null;
+        if (rec) { projectQuick(Items.media(rec)); return; }
+      }
+      changed(true);
+    }
+    function checkCountdown() {
+      const cd = C.countdown;
+      if (!cd || cd.done) return;
+      const late = Date.now() - cd.endAt;
+      if (late < 900) return;
+      cd.done = true;
+      if (late < 6000) afterCountdown();      // si la compu estuvo dormida y ya pasó mucho, no dispara nada
+    }
+
     // ---------- Edición en caliente ----------
     function editSlide(path, patch) {
       const items = path.quick ? (C.quick ? C.quick.items : []) : C.service.items;
@@ -752,6 +778,8 @@
       editSlide, resliceSongs, addItem, removeItem, moveItem, openService, newService, services, setSetting, setStageMsg,
       connected, save: scheduleSave, changed
     });
+    const cdTimer = setInterval(checkCountdown, 250);
+    if (cdTimer && cdTimer.unref) cdTimer.unref();
     return C;
   }
   Proy.createController = createController;
