@@ -124,6 +124,7 @@
         if (cd) {
           const rem = Math.max(0, Math.ceil((cd.endAt - Date.now()) / 1000));
           el.cd.textContent = (cd.label ? cd.label + ' ' : '') + String(Math.floor(rem / 60)).padStart(2, '0') + ':' + String(rem % 60).padStart(2, '0');
+          el.cd.classList.toggle('ps-cd-final', !!((state.settings || {}).cdFinal) && rem <= 10 && rem > 0);
         } else el.cd.textContent = '';
       };
       clock = setInterval(tickClock, 500);
@@ -212,14 +213,32 @@
       logoImg.src = m && m.kind === 'image' ? m.url : 'logo_pagina_2.jpg';
     }
 
+    let cdSec = -1;
     function tickCountdown() {
       const cd = state && state.countdown;
       if (!cd || mode !== 'pantalla') { cdEl.classList.remove('on'); return; }
       const now = Date.now();
-      if (now > cd.endAt + 5000) { cdEl.classList.remove('on'); return; }   // a los 5 s de llegar a cero se oculta
       const rem = Math.max(0, Math.ceil((cd.endAt - now) / 1000));
-      cdT.textContent = String(Math.floor(rem / 60)).padStart(2, '0') + ':' + String(rem % 60).padStart(2, '0');
+      const finalMode = !!((state.settings || {}).cdFinal) && rem <= 10;      // últimos 10 s en grande (opcional)
+      if (now > cd.endAt + (finalMode ? 1500 : 5000)) { cdEl.classList.remove('on', 'final'); return; }   // tras llegar a cero se oculta
       cdL.textContent = cd.label || '';
+      cdEl.classList.toggle('final', finalMode);
+      if (finalMode) {
+        cdEl.classList.toggle('lv-b', rem <= 5 && rem > 3);
+        cdEl.classList.toggle('lv-c', rem <= 3);
+        if (rem !== cdSec) {                                   // un número nuevo: reinicia la animación (aparece, se queda y se desvanece)
+          cdSec = rem;
+          cdT.textContent = String(rem);
+          cdT.classList.remove('pop');
+          void cdT.offsetWidth;
+          cdT.classList.add('pop');
+        }
+      } else {
+        cdSec = -1;
+        cdEl.classList.remove('lv-b', 'lv-c');
+        cdT.classList.remove('pop');
+        cdT.textContent = String(Math.floor(rem / 60)).padStart(2, '0') + ':' + String(rem % 60).padStart(2, '0');
+      }
       cdEl.classList.add('on');
     }
     timer = setInterval(tickCountdown, 250);
