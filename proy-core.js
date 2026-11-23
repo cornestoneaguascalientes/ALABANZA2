@@ -472,9 +472,10 @@
   // ============================================================
   const DEFAULTS = {
     text: { font: 'system', size: 100, weight: 700, color: '#ffffff', align: 'center', shadow: true, uppercase: false },
-    bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0 },
+    bg: { mediaId: null, color: '#000000', dim: 0.35, blur: 0, fit: 'cover' },   // fit: cover (llena y recorta) | contain (completa, sin recortar)
     bibleLayout: 'stack',            // 'stack' (arriba / abajo) | 'split' (lado a lado)
     bibleVersions: ['', ''],
+    bibleStage: true,                 // en la Biblia, el primer Enter solo muestra la previa y el segundo proyecta
     cdAfter: 'logo',                  // qué pasa al llegar a cero: none | logo | black | next | media
     cdAfterMediaId: null,
     cdFinal: true,                    // cuenta regresiva: últimos 10 segundos en grande y animados
