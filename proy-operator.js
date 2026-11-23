@@ -25,7 +25,7 @@
   let C = null, ch = null, root = null, liveR = null, prevR = null, lastShow = -1, audioWarned = false;
   const ui = {
     sel: 0, tab: 'songs', query: '', localSongs: [], media: [], services: [],
-    lastBible: null, kw: [], prepare: false, picked: null, viewService: false
+    lastBible: null, kw: [], prepare: false, picked: null, staged: null, stagedQ: '', viewService: false
   };
 
   // ============================================================
@@ -126,7 +126,7 @@
         <div class="pj-drop" id="pj-drop">
           Arrastra aquí imágenes (JPG, PNG, WebP) o videos (MP4, WebM)
           <div><button class="pj-btn sm" id="pj-media-pick" type="button">Elegir archivos…</button></div>
-          <input id="pj-media-input" type="file" multiple accept="image/*,video/*,.mp4,.webm,.mov" hidden>
+          <input id="pj-media-input" type="file" multiple accept="image/*,video/*,.mp4,.webm,.mov,.m4v,.heic,.heif,.tif,.tiff,.bmp,.avif" hidden>
         </div>
         <div class="pj-thumbs" id="pj-thumbs"></div>
         <p class="pj-help">Los archivos se guardan en este navegador y funcionan sin internet.</p>
@@ -143,18 +143,22 @@
         <label class="pj-fld">Tamaño <input type="range" min="50" max="160" data-set="text.size"></label>
         <label class="pj-chk"><input type="checkbox" data-set="text.shadow"> Sombra</label>
         <label class="pj-chk"><input type="checkbox" data-set="text.uppercase"> Todo en mayúsculas</label>
+        <div class="pj-h">Canciones y Biblia</div>
         <div class="pj-grid2">
           <label class="pj-fld">Líneas por diapositiva<input class="pj-in" type="number" min="1" max="8" data-set="maxLines"></label>
           <label class="pj-fld">Letras máx. por diapositiva<input class="pj-in" type="number" min="30" max="300" step="10" data-set="maxChars"></label>
         </div>
         <button class="pj-btn sm block" id="pj-reslice" type="button">Aplicar a las canciones del orden</button>
+        <p class="pj-help">Con 2 líneas y 90 letras cada diapositiva queda corta y de letra grande. Las canciones que ya están en el orden se actualizan con el botón (se pierden las ediciones manuales de sus diapositivas).</p>
+        <label class="pj-fld">Versículos por diapositiva (Biblia)<input class="pj-in" type="number" min="1" max="6" data-set="bibleVerses"></label>
+        <label class="pj-chk"><input type="checkbox" data-set="bibleStage"> Biblia: el primer Enter muestra la previa y el segundo proyecta</label>
+        <label class="pj-chk"><input type="checkbox" data-set="stopAtItemEnd"> Detenerse al terminar cada canción o cita (no pasar sola a lo siguiente)</label>
+
+        <div class="pj-h">Cuenta regresiva</div>
+        <label class="pj-chk"><input type="checkbox" data-set="cdFinal"> Cuenta regresiva: últimos 10 segundos grandes y animados (10, 9, 8…)</label>
         <label class="pj-fld">Al llegar a cero la cuenta regresiva<select class="pj-in" data-set="cdAfter" id="pj-cd-after"><option value="none">No hacer nada (se oculta sola)</option><option value="logo">Mostrar el logo</option><option value="black">Pantalla negra</option><option value="next">Pasar al siguiente elemento del orden</option><option value="media">Mostrar una imagen o video…</option></select></label>
         <label class="pj-fld" id="pj-cd-media-wrap" hidden>Imagen o video<select class="pj-in" data-set="cdAfterMediaId" id="pj-cd-media"></select></label>
         <p class="pj-help">«Siguiente elemento» funciona cuando la cuenta regresiva es parte del orden del servicio. Las imágenes y videos se agregan en la pestaña Media.</p>
-        <label class="pj-chk"><input type="checkbox" data-set="cdFinal"> Cuenta regresiva: últimos 10 segundos grandes y animados (10, 9, 8…)</label>
-        <label class="pj-chk"><input type="checkbox" data-set="stopAtItemEnd"> Detenerse al terminar cada canción o cita (no pasar sola a lo siguiente)</label>
-        <label class="pj-fld">Versículos por diapositiva (Biblia)<input class="pj-in" type="number" min="1" max="6" data-set="bibleVerses"></label>
-        <p class="pj-help">Con 2 líneas y 90 letras cada diapositiva queda corta y de letra grande. Las canciones que ya están en el orden se actualizan con el botón (se pierden las ediciones manuales de sus diapositivas).</p>
 
         <div class="pj-h">Fondo detrás del texto</div>
         <div class="pj-help" id="pj-bg-name">Fondo: color liso</div>
@@ -162,9 +166,10 @@
           <label class="pj-fld">Color<input class="pj-in" type="color" data-set="bg.color"></label>
           <button class="pj-btn sm" id="pj-bg-clear" type="button">Quitar imagen / video</button>
         </div>
+        <label class="pj-fld">Imagen o video de fondo<select class="pj-in" data-set="bg.fit"><option value="cover">Llenar la pantalla (puede recortar los bordes)</option><option value="contain">Completa (se ve entera, con barras si hace falta)</option></select></label>
         <label class="pj-fld">Oscurecer (legibilidad) <input type="range" min="0" max="90" data-set="bg.dim" data-scale="0.01"></label>
         <label class="pj-fld">Desenfoque <input type="range" min="0" max="40" data-set="bg.blur"></label>
-        <div class="pj-help">Elige el fondo en la pestaña Media (botón «Fondo»).</div>
+        <div class="pj-help">Elige el fondo en la pestaña Media (botón «Fondo»). Las imágenes y videos que proyectas como diapositiva (botón «Proyectar») siempre se ven completos, sin recortar ni deformar.</div>
 
         <div class="pj-h">Salida Lower Third (OBS)</div>
         <label class="pj-fld">Fondo<select class="pj-in" data-set="lower.chroma"><option value="transparent">Transparente</option><option value="#00FF00">Croma verde #00FF00</option><option value="#0000FF">Croma azul #0000FF</option><option value="#FF00FF">Croma magenta #FF00FF</option></select></label>
@@ -333,8 +338,9 @@
   function renderMonitors() {
     const s = C.liveState();
     liveR.update(s);
-    const p = ui.prepare && ui.picked ? slideAtPick(ui.picked) : s.next;
-    $('pj-prev-t').textContent = ui.prepare && ui.picked ? 'PREPARADA (Enter para proyectar)' : 'SIGUIENTE';
+    const staged = ui.staged && ui.staged.slides[0];
+    const p = staged ? ui.staged.slides[0] : (ui.prepare && ui.picked ? slideAtPick(ui.picked) : s.next);
+    $('pj-prev-t').textContent = staged ? 'PREVIA · ' + ui.staged.title + ' (Enter para proyectar)' : (ui.prepare && ui.picked ? 'PREPARADA (Enter para proyectar)' : 'SIGUIENTE');
     prevR.update(Object.assign({}, s, { slide: p, flags: {}, countdown: null }));
   }
 
@@ -507,6 +513,17 @@
 
   function bibleMsg(t, bad) { const el = $('pj-bible-msg'); el.textContent = t || ''; el.classList.toggle('bad', !!bad); }
 
+  /** Proyecta una cita (quita el logo / negro, igual que cualquier diapositiva nueva) */
+  function projectStaged(it) {
+    it = it || ui.staged;
+    if (!it) return;
+    ui.staged = null; ui.stagedQ = '';
+    ui.lastBible = it;
+    C.projectQuick(it);
+    bibleMsg('Proyectando ' + it.title + (it.slides.length > 1 ? ' (' + it.slides.length + ' diapositivas: ↓ para avanzar)' : ''));
+    renderBibleResults(); render();
+  }
+
   function bibleGo(text) {
     const q = text.trim();
     if (!q) return;
@@ -517,10 +534,15 @@
     if (ref) {
       const it = Items.bible(ref, ids, bibleOpts());
       if (it.error) { bibleMsg(it.error, true); return; }
-      ui.lastBible = it; ui.kw = [];
-      C.projectQuick(it);
-      bibleMsg('Proyectando ' + it.title + (it.slides.length > 1 ? ' (' + it.slides.length + ' diapositivas: ↓ para avanzar)' : ''));
-      renderBibleResults(); render();
+      ui.kw = [];
+      const same = ui.staged && ui.stagedQ === q;
+      if (C.settings.bibleStage && !same) {                    // 1.er Enter: solo la previa (no toca lo que está en pantalla)
+        ui.staged = it; ui.stagedQ = q;
+        bibleMsg('Previa de ' + it.title + ': revisa el monitor. Enter otra vez para proyectar.');
+        renderBibleResults(); render();
+        return;
+      }
+      projectStaged(it);                                        // 2.º Enter (o con la previa apagada): se proyecta
       return;
     }
     ui.kw = Bible.search(ids[0], q, 40);
@@ -596,13 +618,36 @@
     } catch (e) { return ''; }
   }
 
+  /** Lee la imagen con el navegador (si no puede, el formato no sirve) y reduce las fotos gigantes (> 3840 px) para que no pesen ni se trabe el proyector */
+  async function prepareImage(f) {
+    let bmp;
+    try { bmp = await createImageBitmap(f); } catch (e) { return { error: true }; }
+    const long = Math.max(bmp.width, bmp.height);
+    const keep = /gif|svg/i.test(f.type) || /\.(gif|svg)$/i.test(f.name);       // los GIF animados y SVG no se tocan
+    if (long <= 3840 || keep) { if (bmp.close) bmp.close(); return { blob: f, type: f.type }; }
+    const k = 3840 / long, c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    if (bmp.close) bmp.close();
+    const png = /png|webp/i.test(f.type);                                          // conserva la transparencia
+    const blob = await new Promise((res) => c.toBlob(res, png ? 'image/png' : 'image/jpeg', 0.92));
+    return blob ? { blob, type: blob.type } : { blob: f, type: f.type };
+  }
+
   async function addMedia(files) {
     let n = 0;
     for (const f of Array.from(files)) {
-      const kind = /^video\//.test(f.type) || /\.(mp4|webm|mov|m4v)$/i.test(f.name) ? 'video' : (/^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|avif)$/i.test(f.name) ? 'image' : null);
-      if (!kind) { toast('Formato no compatible: ' + f.name, 'error'); continue; }
-      const thumb = await makeThumb(f, kind);
-      await DB.put('media', { id: P.util.uid(), name: f.name.replace(/\.[^.]+$/, ''), kind, mime: f.type, blob: f, thumb, size: f.size, added: Date.now() });
+      const isVideo = /^video\//.test(f.type) || /\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name);
+      const isImage = /^image\//.test(f.type) || /\.(jpe?g|jfif|png|webp|gif|avif|bmp|svg|ico|tiff?|heic|heif)$/i.test(f.name);
+      if (!isVideo && !isImage) { toast('Formato no compatible: ' + f.name + ' (usa JPG, PNG, WebP, GIF o video MP4/WebM)', 'error'); continue; }
+      let blob = f, mime = f.type, kind = isVideo ? 'video' : 'image';
+      if (kind === 'image') {
+        const r = await prepareImage(f);
+        if (r.error) { toast('Este navegador no puede leer «' + f.name + '» (los HEIC de iPhone y los TIFF casi nunca abren). Conviértela a JPG o PNG e inténtalo otra vez.', 'error'); continue; }
+        blob = r.blob; mime = r.type;
+      }
+      const thumb = await makeThumb(blob, kind);
+      await DB.put('media', { id: P.util.uid(), name: f.name.replace(/\.[^.]+$/, ''), kind, mime, blob, thumb, size: blob.size, added: Date.now() });
       n++;
     }
     if (n) { ui.media = (await DB.all('media')).sort((a, b) => b.added - a.added); renderMedia(); toast(n + ' archivo(s) guardados'); }
@@ -740,6 +785,7 @@
       if (!b) return;
       const j = Number(b.dataset.j);
       const quickView = C.mode === 'quick' && !ui.viewService;
+      ui.staged = null;
       if (ui.prepare) { ui.picked = { quick: quickView, item: quickView ? 0 : ui.sel, slide: j }; render(); return; }
       if (quickView) C.goQuick(j); else C.go(ui.sel, j);
       render();
@@ -890,6 +936,7 @@
     }
     if (typing) return;
     const k = e.key;
+    if (k !== 'Enter' && ui.staged && /^(Arrow|Page| )/.test(k)) ui.staged = null;   // navegar descarta la previa
     if (k === 'ArrowDown' || k === 'ArrowRight' || k === ' ') { e.preventDefault(); C.next(); }
     else if (k === 'ArrowUp' || k === 'ArrowLeft') { e.preventDefault(); C.prev(); }
     else if (k === 'PageDown') { e.preventDefault(); C.jumpItem(1); }
@@ -897,6 +944,7 @@
     else if (k === 'b' || k === 'B') C.toggleFlag('black');
     else if (k === 'c' || k === 'C') C.toggleFlag('clear');
     else if (k === 'l' || k === 'L') C.toggleFlag('logo');
+    else if (k === 'Enter' && ui.staged) { e.preventDefault(); projectStaged(); }
     else if (k === 'Enter' && ui.prepare && ui.picked) {
       e.preventDefault();
       if (ui.picked.quick) C.goQuick(ui.picked.slide); else C.go(ui.picked.item, ui.picked.slide);
