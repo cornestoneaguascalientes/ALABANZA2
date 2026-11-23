@@ -74,8 +74,8 @@
   }
 
   function effectiveBg(base, slide) {
-    const b = Object.assign({ mediaId: null, color: '#000000', dim: 0.35, blur: 0 }, base || {});
-    if (slide && slide.kind === 'media') return { mediaId: slide.mediaId, color: '#000000', dim: 0, blur: 0, loop: !!slide.loop, fg: true };
+    const b = Object.assign({ mediaId: null, color: '#000000', dim: 0.35, blur: 0, fit: 'cover' }, base || {});
+    if (slide && slide.kind === 'media') return { mediaId: slide.mediaId, color: '#000000', dim: 0, blur: 0, loop: !!slide.loop, fg: true, fit: 'contain' };   // imágenes/videos de anuncio: completos, sin recortar ni deformar
     if (slide && slide.bg) Object.assign(b, slide.bg);
     return b;
   }
@@ -160,7 +160,7 @@
       dim.style.opacity = eff.dim;
       bgWrap.style.filter = eff.blur > 0 ? 'blur(' + eff.blur + 'px)' : '';
       bgWrap.style.transform = eff.blur > 0 ? 'scale(1.06)' : '';
-      const key = [eff.mediaId || '', eff.color, eff.loop ? 1 : 0, eff.fg ? (state && state.showN) : ''].join('|');
+      const key = [eff.mediaId || '', eff.color, eff.fit || 'cover', eff.loop ? 1 : 0, eff.fg ? (state && state.showN) : ''].join('|');
       if (key === bgKey) return;
       bgKey = key;
       const tok = ++bgTok;
@@ -168,6 +168,8 @@
       next.innerHTML = '';
       next.style.backgroundImage = '';
       next.style.backgroundColor = eff.color || '#000';
+      const fit = eff.fit === 'contain' ? 'contain' : 'cover';
+      next.style.backgroundSize = fit;
       if (eff.mediaId) {
         const m = await mediaInfo(eff.mediaId);
         if (tok !== bgTok) return;
@@ -177,6 +179,7 @@
           v.loop = eff.fg ? !!eff.loop : true;           // los fondos siempre en bucle; un video de anuncio solo si se pidió
           v.muted = muted || !eff.fg;                     // los fondos no llevan audio
           v.playsInline = true;
+          v.style.objectFit = fit;
           v.autoplay = true;
           next.appendChild(v);
           const p = v.play();
