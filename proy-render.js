@@ -90,6 +90,151 @@
     return '<div class="pr-in"><div class="pr-vtext">' + lines(slide.text) + '</div></div>';
   }
 
+
+  // ============================================================
+  // Sonido de la cuenta regresiva (últimos 10 s): latidos que suben de intensidad + colchón (pad) + reverb
+  // Todo se sintetiza con Web Audio (sin archivos). Cada golpe se programa con el reloj de audio, así que no se desfasa.
+  // ============================================================
+  const Sound = (function () {
+    let ctx = null, dry = null, conv = null, noiseBuf = null;
+
+    function impulse(c, secs, decay) {             // reverb sintética: ruido que se apaga, suavizado para que sea "cálido"
+      const len = Math.floor(c.sampleRate * secs), buf = c.createBuffer(2, len, c.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch); let lp = 0;
+        for (let i = 0; i < len; i++) {
+          lp += ((Math.random() * 2 - 1) - lp) * 0.35;
+          d[i] = lp * Math.pow(1 - i / len, decay);
+        }
+      }
+      return buf;
+    }
+
+    function ensure() {
+      if (ctx) return ctx;
+      const AC = root.AudioContext || root.webkitAudioContext;
+      if (!AC) return null;
+      try { ctx = new AC(); } catch (e) { return null; }
+      const master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+      dry = ctx.createGain(); dry.gain.value = 0.85; dry.connect(master);
+      conv = ctx.createConvolver(); conv.buffer = impulse(ctx, 2.8, 2.4);
+      const wet = ctx.createGain(); wet.gain.value = 0.55; conv.connect(wet); wet.connect(master);
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      return ctx;
+    }
+
+    function unlock() { const c = ensure(); if (c && c.state === 'suspended') c.resume().catch(() => {}); return !!c && c.state === 'running'; }
+    const running = () => !!ctx && ctx.state === 'running';
+
+    const PC = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    /** Nota base grave (C2..B2) del tono elegido; null = sin colchón */
+    function rootOf(key) {
+      if (key === 'off') return null;
+      const pc = PC[key] == null ? 4 : PC[key];                                   // si no se reconoce: Mi
+      return 36 + pc;
+    }
+
+    function env(g, t, peak, decay) {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peak, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    }
+    function thump(out, t, f0, f1, peak, decay) {   // golpe grave (bombo suave)
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.14);
+      env(g, t, peak, decay);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + decay + 0.05);
+    }
+    function puff(out, t, peak, decay, freq) {      // golpe de aire (da cuerpo al ataque)
+      const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseBuf; f.type = 'lowpass'; f.frequency.value = freq || 700;
+      env(g, t, peak, decay);
+      s.connect(f); f.connect(g); g.connect(out); s.start(t); s.stop(t + decay + 0.05);
+    }
+    function bell(out, t, freq, peak, decay) {      // campana suave (solo en los últimos segundos)
+      [1, 2.0].forEach((m, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = freq * m;
+        env(g, t, peak / (i + 1), decay);
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + decay + 0.05);
+      });
+    }
+
+    /** Un "latido" (lub-dub) por segundo; i = 0..1 sube la intensidad */
+    function beat(out, t, i, k, root) {
+      const g = 0.38 + 0.62 * i;
+      thump(out, t, 135, 46, g, 0.42 + 0.25 * i);
+      puff(out, t, 0.16 * g, 0.09, 900);
+      thump(out, t + 0.21, 108, 44, g * (0.55 + 0.15 * i), 0.3);          // el segundo golpe es más suave
+      if (k <= 5 && root != null) bell(out, t + 0.02, hz(root + 36), 0.035 + 0.05 * i, 1.1);   // brillo: la tónica del tono, dos octavas arriba
+      if (k <= 3) thump(out, t + 0.5, 90, 42, g * 0.35, 0.25);              // y se agrega un tercer pulso muy suave
+    }
+
+    /** Colchón: acorde ABIERTO (tónica y quinta, sin tercera, así queda bien en tono mayor o menor) que sube de volumen y se va abriendo */
+    function pad(out, t0, t1, root) {
+      const f = ctx.createBiquadFilter(), g = ctx.createGain();
+      f.type = 'lowpass'; f.Q.value = 0.7;
+      f.frequency.setValueAtTime(220, t0); f.frequency.exponentialRampToValueAtTime(2400, t1);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.2, t1);
+      g.gain.setTargetAtTime(0.0001, t1, 0.5);                                // al llegar a cero se suelta
+      f.connect(g); g.connect(out);
+      [root, root + 7, root + 12, root + 19].forEach((m, j) => {
+        [-5, 5].forEach((cents) => {
+          const o = ctx.createOscillator(); o.type = j === 0 ? 'sine' : 'triangle'; o.frequency.value = hz(m); o.detune.value = cents;
+          const og = ctx.createGain(); og.gain.value = j === 0 ? 0.9 : 0.45;
+          o.connect(og); og.connect(f); o.start(t0); o.stop(t1 + 3);
+        });
+      });
+    }
+
+    /** Golpe final al llegar a cero */
+    function boom(out, t, root) {
+      thump(out, t, 90, 34, 1.0, 1.9);
+      puff(out, t, 0.5, 0.6, 1400);
+      if (root == null) return;                                               // sin colchón: solo el golpe
+      [root, root + 7, root + 12, root + 19, root + 24].forEach((m) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'triangle'; o.frequency.value = hz(m);
+        env(g, t, 0.16, 2.6);
+        o.connect(g); g.connect(out); o.start(t); o.stop(t + 2.7);
+      });
+    }
+
+    /** Programa los 10 latidos + el golpe final para que caigan justo cuando cambia cada número. endAt = hora (ms) en que llega a cero */
+    function schedule(endAt, volume, key) {
+      const root = rootOf(key == null ? 'E' : key);
+      const c = ensure();
+      if (!c) return null;
+      if (c.state === 'suspended') c.resume().catch(() => {});
+      const now = c.currentTime, nowMs = Date.now();
+      const T = (ms) => now + (ms - nowMs) / 1000;
+      const out = c.createGain();
+      out.gain.value = Math.max(0, Math.min(1, volume == null ? 0.7 : volume));
+      out.connect(dry); out.connect(conv);
+      if (root != null) pad(out, Math.max(now, T(endAt - 10000)), Math.max(now + 0.5, T(endAt)), root);
+      for (let k = 10; k >= 1; k--) {
+        const t = T(endAt - k * 1000);
+        if (t >= now - 0.05) beat(out, Math.max(t, now), (10 - k) / 9, k, root);   // los que ya pasaron no se tocan
+      }
+      if (T(endAt) >= now - 0.05) boom(out, Math.max(T(endAt), now), root);
+      return {
+        stop() {
+          try { out.gain.cancelScheduledValues(c.currentTime); out.gain.setTargetAtTime(0, c.currentTime, 0.04); } catch (e) { /* noop */ }
+          setTimeout(() => { try { out.disconnect(); } catch (e) { /* noop */ } }, 600);
+        }
+      };
+    }
+
+    /** Escucha cómo suena (10 s de prueba) */
+    function preview(volume, key) { unlock(); return schedule(Date.now() + 10300, volume, key); }
+
+    return { unlock, running, schedule, preview };
+  })();
+
   function mount(host, opts) {
     const o = opts || {};
     const mode = o.mode || 'pantalla';
@@ -216,6 +361,23 @@
       logoImg.src = m && m.kind === 'image' ? m.url : 'logo_pagina_2.jpg';
     }
 
+    // Sonido: se programa una sola vez por cuenta, cuando faltan ~10 s (solo la salida lo usa: opts.sound)
+    let seq = null, seqKey = null;
+    function soundSync() {
+      if (!o.sound || mode !== 'pantalla') return;
+      const cd = state && state.countdown, set = (state && state.settings) || {};
+      const early = () => seq && seqKey && Date.now() < seqKey - 50;           // ¿se canceló antes de llegar a cero?
+      if (!(cd && set.cdSound)) { if (early()) seq.stop(); seq = null; seqKey = null; return; }   // si ya llegó a cero, el golpe final termina de sonar
+      if (seqKey && cd.endAt !== seqKey) { if (early()) seq.stop(); seq = null; seqKey = null; }
+      if (seqKey === cd.endAt) return;
+      const left = cd.endAt - Date.now();
+      if (left > 10600 || left < -500) return;
+      if (!Sound.running()) { Sound.unlock(); return; }                         // sin permiso del navegador todavía (falta un clic en la ventana)
+      seq = Sound.schedule(cd.endAt, (set.cdVolume == null ? 70 : set.cdVolume) / 100, set.cdPad);
+      seqKey = seq ? cd.endAt : null;
+    }
+    function tickAll() { soundSync(); tickCountdown(); }
+
     let cdSec = -1;
     function tickCountdown() {
       const cd = state && state.countdown;
@@ -244,7 +406,7 @@
       }
       cdEl.classList.add('on');
     }
-    timer = setInterval(tickCountdown, 250);
+    timer = setInterval(tickAll, 100);
 
     function update(st) {
       state = st;
@@ -264,7 +426,7 @@
       applyLogo(set);
       logo.classList.toggle('on', !!f.logo && !f.black);
       black.classList.toggle('on', !!f.black);
-      tickCountdown();
+      tickAll();
     }
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -276,10 +438,10 @@
       mode,
       update,
       refit() { fit(txt[act], lastScale); },
-      destroy() { clearInterval(timer); if (ro) ro.disconnect(); }
+      destroy() { clearInterval(timer); if (seq) seq.stop(); if (ro) ro.disconnect(); }
     };
   }
 
-  Proy.Render = { mount, mediaInfo, forgetMedia, FONTS, effectiveBg };
+  Proy.Render = { mount, mediaInfo, forgetMedia, FONTS, effectiveBg, Sound };
   if (typeof module !== 'undefined' && module.exports) module.exports = Proy.Render;
 })(typeof window !== 'undefined' ? window : globalThis);
