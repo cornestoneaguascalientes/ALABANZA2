@@ -191,17 +191,11 @@
       });
     }
 
-    /** Golpe final al llegar a cero */
+    /** Latido final al llegar a cero: un lub-dub como los demás, un poco más fuerte y con una caída larga (la reverb lo alarga todavía más) */
     function boom(out, t, root) {
-      thump(out, t, 90, 34, 1.0, 1.9);
-      puff(out, t, 0.5, 0.6, 1400);
-      if (root == null) return;                                               // sin colchón: solo el golpe
-      [root, root + 7, root + 12, root + 19, root + 24].forEach((m) => {
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = 'triangle'; o.frequency.value = hz(m);
-        env(g, t, 0.16, 2.6);
-        o.connect(g); g.connect(out); o.start(t); o.stop(t + 2.7);
-      });
+      thump(out, t, 135, 46, 1.2, 2.6);                  // lub: más fuerte que el último latido (1.0) y se apaga despacio
+      puff(out, t, 0.2, 0.09, 900);
+      thump(out, t + 0.21, 108, 44, 0.85, 1.8);          // dub
     }
 
     /** Programa los 10 latidos + el golpe final para que caigan justo cuando cambia cada número. endAt = hora (ms) en que llega a cero */
