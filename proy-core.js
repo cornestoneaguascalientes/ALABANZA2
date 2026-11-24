@@ -478,6 +478,9 @@
     bibleStage: true,                 // en la Biblia, el primer Enter solo muestra la previa y el segundo proyecta
     cdAfter: 'logo',                  // qué pasa al llegar a cero: none | logo | black | next | media
     cdAfterMediaId: null,
+    cdSound: true,                    // latidos y golpe final en los últimos 10 s (suena en la pantalla de proyección)
+    cdVolume: 70,
+    cdPadKey: 'auto',                 // tono del colchón: auto (primera canción del orden) | off | C, C#, D, Eb, E, F, F#, G, Ab, A, Bb, B
     cdFinal: true,                    // cuenta regresiva: últimos 10 segundos en grande y animados
     stopAtItemEnd: true,              // al terminar las diapositivas de una canción/cita, se queda ahí (no pasa sola a lo siguiente)
     bibleVerses: 1,                   // versículos por diapositiva
@@ -537,7 +540,7 @@
         rev: ++C.rev, showN: C.showN, ts: Date.now(), slide, next: nextSlide, itemTitle: it ? it.title : '',
         position: C.cursor ? { item: C.cursor.item + 1, items: items.length, slide: C.cursor.slide + 1, slides: slidesOf(it).length } : null,
         flags: Object.assign({}, C.flags), countdown: C.countdown, stageMsg: C.stageMsg,
-        settings: { text: C.settings.text, bg: C.settings.bg, bibleLayout: C.settings.bibleLayout, lower: C.settings.lower, logoMediaId: C.settings.logoMediaId, cdFinal: !!C.settings.cdFinal }
+        settings: { text: C.settings.text, bg: C.settings.bg, bibleLayout: C.settings.bibleLayout, lower: C.settings.lower, logoMediaId: C.settings.logoMediaId, cdFinal: !!C.settings.cdFinal, cdSound: !!C.settings.cdSound, cdVolume: C.settings.cdVolume, cdPad: padKey() }
       };
     }
 
@@ -642,6 +645,15 @@
       C.countdown = { endAt: Date.now() + m * 60000, label: label || C.settings.countdown.label };
       C.settings.countdown = { minutes: m, label: C.countdown.label };
       changed(true);
+    }
+    /** Tono para el colchón de la cuenta regresiva. «auto» toma el tono de la primera canción del orden (si no hay, Mi) */
+    function padKey() {
+      const k = C.settings.cdPadKey || 'auto';
+      if (k !== 'auto') return k;
+      const song = C.service.items.find((it) => it.type === 'song' && it.meta && it.meta.key);
+      const m = song ? String(song.meta.key).trim().match(/^([A-Ga-g])([#b♯♭]?)/) : null;
+      if (!m) return 'E';
+      return m[1].toUpperCase() + m[2].replace('♯', '#').replace('♭', 'b');
     }
     function stopCountdown() { C.countdown = null; changed(true); }
 
@@ -775,7 +787,7 @@
     Object.assign(C, {
       init, onChange: (fn) => { subs.add(fn); return () => subs.delete(fn); }, emit, publish, liveState,
       list, current: () => at(C.cursor, list()), nextOf, prevOf, slidesOf,
-      go, goQuick, next, prev, jumpItem, projectQuick, closeQuick, toggleFlag, startCountdown, stopCountdown,
+      padKey, go, goQuick, next, prev, jumpItem, projectQuick, closeQuick, toggleFlag, startCountdown, stopCountdown,
       editSlide, resliceSongs, addItem, removeItem, moveItem, openService, newService, services, setSetting, setStageMsg,
       connected, save: scheduleSave, changed
     });
