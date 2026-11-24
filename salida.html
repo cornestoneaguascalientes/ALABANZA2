@@ -17,6 +17,7 @@
       transition: opacity .6s ease; pointer-events: none; text-align: center;
     }
     #hint.off { opacity: 0; }
+    #hint { display: none; }   /* sin avisos en pantalla */
   </style>
 </head>
 <body>
@@ -82,16 +83,6 @@
       addEventListener('click', function () { if (Proy.Render.Sound) Proy.Render.Sound.unlock(); enterFs(); });   // el clic también habilita el sonido
       addEventListener('dblclick', function () { if (document.fullscreenElement && Date.now() - fsAt > 1200) document.exitFullscreen(); });
       addEventListener('keydown', function (e) { if (Proy.Render.Sound) Proy.Render.Sound.unlock(); if (e.key === 'f' || e.key === 'F') toggleFs(); });
-      // Si sale de pantalla completa sin querer (y no es el Lower Third), avisa: un clic la vuelve a poner
-      document.addEventListener('fullscreenchange', function () {
-        if (mode === 'lower') return;
-        if (!document.fullscreenElement) {
-          hint.textContent = 'Un clic = pantalla completa';
-          hint.classList.remove('off');
-          setTimeout(function () { if (!document.fullscreenElement) hint.classList.add('off'); }, 6000);
-        }
-      });
-
       // El cursor se oculta solo a los 2 s sin moverlo
       var t = null;
       function wake() { document.body.classList.remove('cursor-hide'); clearTimeout(t); t = setTimeout(function () { document.body.classList.add('cursor-hide'); }, 2000); }
