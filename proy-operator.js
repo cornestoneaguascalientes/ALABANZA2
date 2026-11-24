@@ -155,6 +155,17 @@
         <label class="pj-chk"><input type="checkbox" data-set="stopAtItemEnd"> Detenerse al terminar cada canción o cita (no pasar sola a lo siguiente)</label>
 
         <div class="pj-h">Cuenta regresiva</div>
+        <label class="pj-chk"><input type="checkbox" data-set="cdSound"> Sonido en los últimos 10 segundos (latidos que van subiendo, con eco)</label>
+        <label class="pj-fld">Volumen del sonido <input type="range" min="0" max="100" data-set="cdVolume"></label>
+        <label class="pj-fld">Tono del colchón (pad)<select class="pj-in" data-set="cdPadKey">
+          <option value="auto">Automático (tono de la primera canción del orden)</option>
+          <option value="off">Sin colchón (solo latidos)</option>
+          <option value="C">Do (C)</option><option value="C#">Do♯ / Re♭ (C#)</option><option value="D">Re (D)</option><option value="Eb">Mi♭ (Eb)</option>
+          <option value="E">Mi (E)</option><option value="F">Fa (F)</option><option value="F#">Fa♯ / Sol♭ (F#)</option><option value="G">Sol (G)</option>
+          <option value="Ab">La♭ (Ab)</option><option value="A">La (A)</option><option value="Bb">Si♭ (Bb)</option><option value="B">Si (B)</option>
+        </select></label>
+        <button class="pj-btn sm block" id="pj-cd-test" type="button">▶ Probar el sonido (10 segundos)</button>
+        <p class="pj-help">El sonido sale de la pantalla de proyección, por la salida de audio de esta computadora. Haz un clic en esa ventana al abrirla (el mismo clic de pantalla completa) para que el navegador permita el sonido.</p>
         <label class="pj-chk"><input type="checkbox" data-set="cdFinal"> Cuenta regresiva: últimos 10 segundos grandes y animados (10, 9, 8…)</label>
         <label class="pj-fld">Al llegar a cero la cuenta regresiva<select class="pj-in" data-set="cdAfter" id="pj-cd-after"><option value="none">No hacer nada (se oculta sola)</option><option value="logo">Mostrar el logo</option><option value="black">Pantalla negra</option><option value="next">Pasar al siguiente elemento del orden</option><option value="media">Mostrar una imagen o video…</option></select></label>
         <label class="pj-fld" id="pj-cd-media-wrap" hidden>Imagen o video<select class="pj-in" data-set="cdAfterMediaId" id="pj-cd-media"></select></label>
@@ -831,6 +842,13 @@
     $('pj-bible-add').onclick = () => { if (ui.lastBible) { addToService(JSON.parse(JSON.stringify(ui.lastBible)), false); toast('Cita agregada al orden'); } else bibleMsg('Aún no has proyectado ninguna cita.', true); };
     $('pj-bible-file').onclick = () => $('pj-bible-input').click();
     $('pj-bible-more').onclick = () => bibleMore(5);
+    let cdTest = null;
+    $('pj-cd-test').onclick = () => {
+      if (cdTest) { cdTest.stop(); cdTest = null; }
+      if (!P.Render.Sound.unlock() && !P.Render.Sound.running()) { /* el clic ya lo habilita */ }
+      cdTest = P.Render.Sound.preview((C.settings.cdVolume == null ? 70 : C.settings.cdVolume) / 100, C.padKey());
+      if (!cdTest) toast('Este navegador no permite generar sonido', 'error');
+    };
     window.addEventListener('resize', () => fitSlidesBox($('pj-slides')));
     $('pj-bible-sync').onclick = () => syncServerBibles(true);
     $('pj-reslice').onclick = () => {
