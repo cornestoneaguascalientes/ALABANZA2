@@ -74,7 +74,7 @@
   }
 
   function effectiveBg(base, slide) {
-    const b = Object.assign({ mediaId: null, color: '#000000', dim: 0.35, blur: 0, fit: 'cover' }, base || {});
+    const b = Object.assign({ mediaId: null, color: '#000000', dim: 0.35, blur: 0, fit: 'cover', preset: null, accent: '' }, base || {});
     if (slide && slide.kind === 'media') return { mediaId: slide.mediaId, color: '#000000', dim: 0, blur: 0, loop: !!slide.loop, fg: true, fit: 'contain' };   // imágenes/videos de anuncio: completos, sin recortar ni deformar
     if (slide && slide.bg) Object.assign(b, slide.bg);
     return b;
@@ -229,6 +229,142 @@
     return { unlock, running, schedule, preview };
   })();
 
+
+  // ============================================================
+  // Fondos animados (hechos con código, sin archivos). Predominan el negro y la luz brillante, para que se distingan en una pared con luz ambiente.
+  // La mayoría es CSS puro (casi no gasta); estrellas, brasas y polvo dorado usan un canvas ligero (30 cuadros por segundo).
+  // ============================================================
+  const Fx = (function () {
+    const LIST = [
+      { id: 'aurora', name: 'Aurora', accent: '#2fa4ff' },
+      { id: 'rayos', name: 'Rayos de luz', accent: '#ffe2a0' },
+      { id: 'resplandor', name: 'Resplandor', accent: '#ff8a2b' },
+      { id: 'niebla', name: 'Niebla', accent: '#6d86ff' },
+      { id: 'ondas', name: 'Ondas', accent: '#35c6ff' },
+      { id: 'olas', name: 'Olas', accent: '#2f80ff' },
+      { id: 'horizonte', name: 'Horizonte', accent: '#ffb347' },
+      { id: 'bordes', name: 'Bordes de luz', accent: '#4fa8ff' },
+      { id: 'estrellas', name: 'Estrellas', accent: '#ffffff', canvas: true },
+      { id: 'brasas', name: 'Brasas', accent: '#ff7a1a', canvas: true },
+      { id: 'polvo', name: 'Polvo dorado', accent: '#ffd36b', canvas: true }
+    ];
+    const byId = (id) => LIST.filter((f) => f.id === id)[0] || null;
+
+    // ---- color: del acento se sacan 3 tonos brillantes (luminosidad alta = se ven con luz en la pared)
+    function hexToHsl(hex) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+      const n = parseInt(m ? m[1] : 'ffffff', 16);
+      const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2;
+      let h = 0, s = 0;
+      if (mx !== mn) {
+        const d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h *= 60;
+      }
+      return { h, s, l };
+    }
+    function palette(hex) {
+      const c = hexToHsl(hex);
+      if (c.s < 0.12) return ['hsl(0,0%,100%)', 'hsl(45,60%,88%)', 'hsl(210,60%,88%)'];       // blanco / casi blanco
+      const s = Math.round(Math.max(c.s, 0.8) * 100), l = Math.round(Math.min(Math.max(c.l, 0.52), 0.62) * 100);
+      const h = (d) => ((Math.round(c.h) + d) % 360 + 360) % 360;
+      return ['hsl(' + h(0) + ',' + s + '%,' + l + '%)', 'hsl(' + h(22) + ',' + s + '%,' + l + '%)', 'hsl(' + h(-24) + ',' + Math.max(s - 6, 60) + '%,' + Math.max(l - 3, 48) + '%)'];
+    }
+
+    // ---- HTML de cada fondo (todo el estilo vive en proyeccion.css)
+    const WAVE = '<svg class="w" viewBox="0 0 2400 200" preserveAspectRatio="none"><path d="M0 100 Q150 30 300 100 T600 100 T900 100 T1200 100 T1500 100 T1800 100 T2100 100 T2400 100 V200 H0 Z"/></svg>';
+    const HTML = {
+      aurora: '<i class="b b1"></i><i class="b b2"></i><i class="b b3"></i>',
+      rayos: '<i class="glow"></i><i class="r r1"></i><i class="r r2"></i><i class="r r3"></i><i class="r r4"></i><i class="r r5"></i>',
+      resplandor: '<i class="g g1"></i><i class="g g2"></i>',
+      niebla: '<i class="f f1"></i><i class="f f2"></i><i class="f f3"></i>',
+      ondas: '<i class="o o1"></i><i class="o o2"></i><i class="o o3"></i><i class="o o4"></i>',
+      olas: '<div class="wv wv1">' + WAVE + '</div><div class="wv wv2">' + WAVE + '</div>',
+      horizonte: '<i class="hg"></i><i class="hr"></i><i class="hl"></i>',
+      bordes: '<div class="ering"><i></i></div>',
+      estrellas: '<canvas width="960" height="540"></canvas>',
+      brasas: '<canvas width="960" height="540"></canvas>',
+      polvo: '<canvas width="960" height="540"></canvas>'
+    };
+
+    // ---- canvas ligero
+    function startCanvas(canvas, type, pal, still) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return () => {};
+      const W = canvas.width, H = canvas.height, rnd = (a, b) => a + Math.random() * (b - a);
+      const col = type === 'estrellas' ? pal[0] : pal[0];
+      let P = [], shoot = null, shootAt = 3, raf = 0, last = 0, t = 0, dead = false;
+      const make = (init) => {
+        if (type === 'estrellas') return { x: rnd(0, W), y: rnd(0, H), r: rnd(0.8, 2.6), ph: rnd(0, 6.28), sp: rnd(0.4, 1.8) };
+        if (type === 'brasas') return { x: rnd(0, W), y: init ? rnd(0, H) : H + rnd(0, 40), r: rnd(1.6, 4.6), vy: rnd(0.4, 1.3), ph: rnd(0, 6.28), sw: rnd(0.4, 1.6), sp: rnd(0.8, 2.4) };
+        return { x: rnd(0, W), y: rnd(0, H), r: rnd(1.2, 3.8), vx: rnd(-0.12, 0.12), vy: rnd(-0.18, 0.05), ph: rnd(0, 6.28), sp: rnd(0.5, 1.6) };
+      };
+      const N = type === 'estrellas' ? 130 : type === 'brasas' ? 95 : 80;
+      for (let i = 0; i < N; i++) P.push(make(true));
+
+      function step() {
+        for (let i = 0; i < P.length; i++) {
+          const p = P[i];
+          if (type === 'brasas') { p.y -= p.vy; p.x += Math.sin(t * p.sw + p.ph) * 0.35; if (p.y < -10) P[i] = make(false); }
+          else if (type === 'polvo') { p.x += p.vx; p.y += p.vy; if (p.x < -5) p.x = W + 5; if (p.x > W + 5) p.x = -5; if (p.y < -5) p.y = H + 5; if (p.y > H + 5) p.y = -5; }
+        }
+      }
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        ctx.shadowColor = col;
+        for (const p of P) {
+          let a;
+          if (type === 'brasas') a = Math.max(0, Math.min(1, (p.y / H) * 1.25)) * (0.55 + 0.45 * Math.sin(t * p.sp + p.ph));
+          else a = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(t * p.sp + p.ph));
+          ctx.globalAlpha = Math.max(0, Math.min(1, a));
+          ctx.shadowBlur = type === 'estrellas' ? (p.r > 1.8 ? 14 : 6) : 16;
+          ctx.fillStyle = type === 'brasas' && p.r < 1.8 ? pal[1] : col;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
+        }
+        if (type === 'estrellas' && shoot) {                         // estrella fugaz de vez en cuando
+          ctx.globalAlpha = Math.max(0, shoot.life);
+          ctx.shadowBlur = 8; ctx.strokeStyle = col; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.moveTo(shoot.x, shoot.y); ctx.lineTo(shoot.x - shoot.vx * 9, shoot.y - shoot.vy * 9); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+      function frame(ts) {
+        if (dead) return;
+        raf = requestAnimationFrame(frame);
+        if (ts - last < 33) return;                                   // ~30 cuadros por segundo
+        last = ts; t += 0.033;
+        step();
+        if (type === 'estrellas') {
+          shootAt -= 0.033;
+          if (!shoot && shootAt <= 0) { shoot = { x: rnd(W * 0.3, W * 0.9), y: rnd(0, H * 0.4), vx: rnd(10, 16), vy: rnd(4, 7), life: 1 }; shootAt = rnd(7, 14); }
+          if (shoot) { shoot.x -= shoot.vx; shoot.y += shoot.vy; shoot.life -= 0.035; if (shoot.life <= 0) shoot = null; }
+        }
+        draw();
+      }
+      if (still) { for (let i = 0; i < 90; i++) { t += 0.033; step(); } draw(); return () => {}; }
+      raf = requestAnimationFrame(frame);
+      return () => { dead = true; cancelAnimationFrame(raf); };
+    }
+
+    /** Dibuja el fondo `id` dentro de `host`. opts: { accent: '#rrggbb' (vacío = el original), still: true (miniatura sin animar) } */
+    function build(host, id, opts) {
+      const def = byId(id);
+      if (!def) return { stop() {} };
+      const o = opts || {};
+      const pal = palette(o.accent || def.accent);
+      host.classList.add('pr-fx', 'fx-' + id);
+      host.style.setProperty('--c1', pal[0]); host.style.setProperty('--c2', pal[1]); host.style.setProperty('--c3', pal[2]);
+      host.innerHTML = HTML[id] || '';
+      let stop = () => {};
+      if (def.canvas) stop = startCanvas(host.querySelector('canvas'), id, pal, !!o.still);
+      return { stop() { stop(); stop = () => {}; } };
+    }
+
+    return { list: LIST, byId, build, palette };
+  })();
+
   function mount(host, opts) {
     const o = opts || {};
     const mode = o.mode || 'pantalla';
@@ -299,11 +435,14 @@
       dim.style.opacity = eff.dim;
       bgWrap.style.filter = eff.blur > 0 ? 'blur(' + eff.blur + 'px)' : '';
       bgWrap.style.transform = eff.blur > 0 ? 'scale(1.06)' : '';
-      const key = [eff.mediaId || '', eff.color, eff.fit || 'cover', eff.loop ? 1 : 0, eff.fg ? (state && state.showN) : ''].join('|');
+      const key = [eff.mediaId || '', eff.preset || '', eff.accent || '', eff.color, eff.fit || 'cover', eff.loop ? 1 : 0, eff.fg ? (state && state.showN) : ''].join('|');
       if (key === bgKey) return;
       bgKey = key;
       const tok = ++bgTok;
       const next = bgLayers[1 - bgAct], old = bgLayers[bgAct];
+      if (next._fx) { next._fx.stop(); next._fx = null; }
+      next.classList.remove('pr-fx');
+      next.className = next.className.replace(/\bfx-\w+/g, '').trim();
       next.innerHTML = '';
       next.style.backgroundImage = '';
       next.style.backgroundColor = eff.color || '#000';
@@ -327,10 +466,11 @@
           });
         } else if (m) next.style.backgroundImage = 'url("' + m.url + '")';
       }
+      if (eff.preset && !eff.mediaId && !eff.fg) next._fx = Fx.build(next, eff.preset, { accent: eff.accent });   // fondo animado
       next.classList.add('on');
       old.classList.remove('on');
       bgAct = 1 - bgAct;
-      setTimeout(() => { if (tok === bgTok) old.innerHTML = ''; }, 800);   // detiene el video anterior
+      setTimeout(() => { if (tok === bgTok) { if (old._fx) { old._fx.stop(); old._fx = null; } old.className = old.className.replace(/\bfx-\w+|\bpr-fx\b/g, '').trim(); old.innerHTML = ''; } }, 800);   // detiene el video / animación anterior
     }
 
     function renderText(slide, set) {
@@ -432,10 +572,10 @@
       mode,
       update,
       refit() { fit(txt[act], lastScale); },
-      destroy() { clearInterval(timer); if (seq) seq.stop(); if (ro) ro.disconnect(); }
+      destroy() { clearInterval(timer); if (seq) seq.stop(); bgLayers.forEach((l) => { if (l._fx) l._fx.stop(); }); if (ro) ro.disconnect(); }
     };
   }
 
-  Proy.Render = { mount, mediaInfo, forgetMedia, FONTS, effectiveBg, Sound };
+  Proy.Render = { mount, mediaInfo, forgetMedia, FONTS, effectiveBg, Sound, Fx };
   if (typeof module !== 'undefined' && module.exports) module.exports = Proy.Render;
 })(typeof window !== 'undefined' ? window : globalThis);
