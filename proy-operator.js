@@ -173,9 +173,16 @@
 
         <div class="pj-h">Fondo detrás del texto</div>
         <div class="pj-help" id="pj-bg-name">Fondo: color liso</div>
+        <div class="pj-h">Fondos animados</div>
+        <div class="pj-fxgrid" id="pj-fxgrid"></div>
         <div class="pj-grid2">
-          <label class="pj-fld">Color<input class="pj-in" type="color" data-set="bg.color"></label>
-          <button class="pj-btn sm" id="pj-bg-clear" type="button">Quitar imagen / video</button>
+          <label class="pj-fld">Color del fondo animado<input class="pj-in" type="color" id="pj-fx-accent"></label>
+          <button class="pj-btn sm" id="pj-fx-reset" type="button">Color original</button>
+        </div>
+        <p class="pj-help">Hechos con código: no pesan, funcionan sin internet y predominan el negro con luz brillante para que se vean en la pared. Se aplican detrás de letras y versículos. Al elegir uno se quita la imagen o video de fondo.</p>
+        <div class="pj-grid2">
+          <label class="pj-fld">Color liso<input class="pj-in" type="color" data-set="bg.color"></label>
+          <button class="pj-btn sm" id="pj-bg-clear" type="button">Quitar fondo (imagen, video o animado)</button>
         </div>
         <label class="pj-fld">Imagen o video de fondo<select class="pj-in" data-set="bg.fit"><option value="cover">Llenar la pantalla (puede recortar los bordes)</option><option value="contain">Completa (se ve entera, con barras si hace falta)</option></select></label>
         <label class="pj-fld">Oscurecer (legibilidad) <input type="range" min="0" max="90" data-set="bg.dim" data-scale="0.01"></label>
@@ -411,6 +418,27 @@
     void ids;
   }
 
+  /** Miniaturas de los fondos animados (la primera es «sin animación») */
+  const fxThumbs = [];
+  function renderFxGallery() {
+    const grid = $('pj-fxgrid');
+    if (!grid) return;
+    const cur = C.settings.bg.preset || '';
+    if (!grid.children.length) {
+      fxThumbs.forEach((h) => h.stop()); fxThumbs.length = 0;
+      const tiles = [{ id: '', name: 'Sin animación' }].concat(P.Render.Fx.list);
+      grid.innerHTML = tiles.map((f) => '<button type="button" class="pj-fxbtn" data-fx="' + f.id + '"><div class="pj-fxthumb"></div><div class="pj-fxname">' + esc(f.name) + '</div></button>').join('');
+      [].slice.call(grid.querySelectorAll('.pj-fxbtn')).forEach((btn) => {
+        const id = btn.dataset.fx;
+        if (id) fxThumbs.push(P.Render.Fx.build(btn.querySelector('.pj-fxthumb'), id, { still: true }));
+      });
+    }
+    [].slice.call(grid.querySelectorAll('.pj-fxbtn')).forEach((btn) => btn.classList.toggle('on', (btn.dataset.fx || '') === cur));
+    const def = P.Render.Fx.byId(cur);
+    $('pj-fx-accent').value = C.settings.bg.accent || (def ? def.accent : '#ffffff');
+    $('pj-fx-accent').disabled = !def;
+  }
+
   function renderMedia() {
     renderCdMedia();
     const bg = C.settings.bg.mediaId, lg = C.settings.logoMediaId;
@@ -425,7 +453,8 @@
           <button type="button" data-act="del" aria-label="Eliminar">✕</button>
         </div></div>`).join('') : '<div class="pj-empty">Aún no hay imágenes ni videos.</div>';
     const m = ui.media.find((x) => x.id === bg);
-    $('pj-bg-name').textContent = m ? 'Fondo: ' + m.name + (m.kind === 'video' ? ' (video en bucle)' : '') : 'Fondo: color liso';
+    const fxd = P.Render.Fx.byId(C.settings.bg.preset);
+    $('pj-bg-name').textContent = m ? 'Fondo: ' + m.name + (m.kind === 'video' ? ' (video en bucle)' : '') : (fxd ? 'Fondo animado: ' + fxd.name : 'Fondo: color liso');
   }
 
   /** Llena la lista de imágenes/videos para «Al llegar a cero → mostrar una imagen o video» */
@@ -667,7 +696,7 @@
   async function mediaAction(id, act) {
     const m = ui.media.find((x) => x.id === id);
     if (!m) return;
-    if (act === 'bg') C.setSetting('bg.mediaId', C.settings.bg.mediaId === id ? null : id);
+    if (act === 'bg') { C.setSetting('bg.mediaId', C.settings.bg.mediaId === id ? null : id); if (C.settings.bg.mediaId) C.setSetting('bg.preset', null); renderFxGallery(); }
     else if (act === 'logo') C.setSetting('logoMediaId', C.settings.logoMediaId === id ? null : id);
     else if (act === 'slide') { addToService(Items.media(m), true); }
     else if (act === 'del') {
@@ -894,7 +923,17 @@
       const b = e.target.closest('button'), t = e.target.closest('.pj-thumb');
       if (b && t) mediaAction(t.dataset.id, b.dataset.act);
     });
-    $('pj-bg-clear').onclick = () => { C.setSetting('bg.mediaId', null); renderMedia(); };
+    $('pj-bg-clear').onclick = () => { C.setSetting('bg.mediaId', null); C.setSetting('bg.preset', null); renderMedia(); renderFxGallery(); };
+    $('pj-fx-accent').oninput = (e) => { C.setSetting('bg.accent', e.target.value); };
+    $('pj-fx-reset').onclick = () => { C.setSetting('bg.accent', ''); renderFxGallery(); };
+    $('pj-fxgrid').addEventListener('click', (e) => {
+      const b = e.target.closest('.pj-fxbtn');
+      if (!b) return;
+      const id = b.dataset.fx || null;
+      C.setSetting('bg.preset', id);
+      if (id) { C.setSetting('bg.mediaId', null); C.setSetting('bg.accent', ''); C.setSetting('bg.dim', 0); C.setSetting('bg.blur', 0); }   // sin oscurecer: así la luz se ve más en la pared
+      renderMedia(); syncSettings(); renderFxGallery();
+    });
     $('pj-logo-default').onclick = () => { C.setSetting('logoMediaId', null); renderMedia(); };
 
     // Ajustes (cada control con data-set escribe directo en la configuración)
@@ -996,7 +1035,7 @@
     bind();
     switchTab('songs');
     syncSettings();
-    renderSongs(); renderBibleVersions(); renderBibleResults(); renderMedia();
+    renderSongs(); renderBibleVersions(); renderBibleResults(); renderMedia(); renderFxGallery();
     syncServerBibles(false);        // si falta alguna Biblia del servidor, se baja sola (una vez por dispositivo)
     C.onChange(render);
     render();
