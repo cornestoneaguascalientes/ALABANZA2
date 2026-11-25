@@ -214,3 +214,75 @@ input[type="color"].pj-in { padding: 2px; height: 36px; }
   .nav-btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 @media (max-width: 359px) { .nav-btn { font-size: 10px; } }
+
+/* ============================================================
+   3) Fondos animados (código puro). Predomina el negro; la luz es brillante para que se vea en la pared.
+      Colores: --c1, --c2, --c3 (los pone el JS a partir del color elegido). Medidas en cq* para que escalen en monitores y miniaturas.
+   ============================================================ */
+.pr-fx { overflow: hidden; background-color: #000; }
+.pr-fx i, .pr-fx .wv, .pr-fx .ering { position: absolute; display: block; pointer-events: none; will-change: transform, opacity; }
+.pr-fx canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.pj-fxthumb { position: relative; aspect-ratio: 16 / 9; container-type: size; overflow: hidden; background: #000; }
+
+/* Aurora: manchas de luz grandes que se desplazan despacio */
+.fx-aurora .b { border-radius: 50%; width: 78cqw; height: 60cqh; opacity: .6; mix-blend-mode: screen; }
+.fx-aurora .b1 { left: -18cqw; top: -22cqh; background: radial-gradient(closest-side, var(--c1), transparent 72%); animation: fx-a1 24s ease-in-out infinite alternate; }
+.fx-aurora .b2 { right: -22cqw; top: 22cqh; background: radial-gradient(closest-side, var(--c2), transparent 72%); animation: fx-a2 30s ease-in-out infinite alternate; }
+.fx-aurora .b3 { left: 12cqw; bottom: -34cqh; background: radial-gradient(closest-side, var(--c3), transparent 72%); animation: fx-a3 36s ease-in-out infinite alternate; }
+@keyframes fx-a1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(34cqw, 24cqh) scale(1.25); } }
+@keyframes fx-a2 { from { transform: translate(0, 0) scale(1.15); } to { transform: translate(-36cqw, -20cqh) scale(.9); } }
+@keyframes fx-a3 { from { transform: translate(0, 0) scale(.95); } to { transform: translate(30cqw, -22cqh) scale(1.3); } }
+
+/* Rayos de luz: haces que bajan desde arriba y se mecen */
+.fx-rayos .glow { left: 50%; top: -30cqh; width: 90cqw; height: 55cqh; margin-left: -45cqw; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--c1) 70%, transparent), transparent 75%); animation: fx-breathe 9s ease-in-out infinite; }
+.fx-rayos .r { top: -8cqh; width: 15cqw; height: 135cqh; transform-origin: 50% 0; -webkit-mask-image: linear-gradient(to bottom, #000, transparent 88%); mask-image: linear-gradient(to bottom, #000, transparent 88%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c1) 55%, transparent) 50%, transparent); }
+.fx-rayos .r1 { left: 14%; animation: fx-sway 14s ease-in-out infinite alternate; --a: -18deg; --b: -6deg; }
+.fx-rayos .r2 { left: 30%; width: 10cqw; animation: fx-sway 18s ease-in-out -4s infinite alternate; --a: -8deg; --b: 8deg; }
+.fx-rayos .r3 { left: 44%; width: 18cqw; animation: fx-sway 16s ease-in-out -8s infinite alternate; --a: -5deg; --b: 5deg; }
+.fx-rayos .r4 { left: 62%; width: 11cqw; animation: fx-sway 20s ease-in-out -2s infinite alternate; --a: 8deg; --b: -8deg; }
+.fx-rayos .r5 { left: 76%; animation: fx-sway 15s ease-in-out -10s infinite alternate; --a: 6deg; --b: 18deg; }
+@keyframes fx-sway { 0% { transform: rotate(var(--a)); opacity: .35; } 50% { opacity: .9; } 100% { transform: rotate(var(--b)); opacity: .45; } }
+@keyframes fx-breathe { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+
+/* Resplandor: luz que "respira" desde abajo, como un amanecer */
+.fx-resplandor .g { border-radius: 50%; }
+.fx-resplandor .g1 { left: 50%; bottom: -52cqh; width: 135cqw; height: 115cqh; margin-left: -67.5cqw; background: radial-gradient(closest-side, color-mix(in srgb, var(--c1) 90%, transparent), color-mix(in srgb, var(--c3) 40%, transparent) 55%, transparent); animation: fx-breathe 9s ease-in-out infinite; }
+.fx-resplandor .g2 { left: 50%; top: -28cqh; width: 70cqw; height: 45cqh; margin-left: -35cqw; background: radial-gradient(closest-side, color-mix(in srgb, var(--c3) 38%, transparent), transparent); animation: fx-breathe 13s ease-in-out -5s infinite; }
+
+/* Niebla: bruma muy tenue que cruza lentamente */
+.fx-niebla .f { width: 85cqw; height: 48cqh; border-radius: 50%; }
+.fx-niebla .f1 { left: -30cqw; top: 6cqh; background: radial-gradient(closest-side, color-mix(in srgb, var(--c1) 42%, transparent), transparent); animation: fx-fog 42s ease-in-out infinite alternate; }
+.fx-niebla .f2 { left: 10cqw; top: 38cqh; background: radial-gradient(closest-side, color-mix(in srgb, var(--c2) 36%, transparent), transparent); animation: fx-fog 54s ease-in-out -20s infinite alternate-reverse; }
+.fx-niebla .f3 { left: 30cqw; top: -10cqh; background: radial-gradient(closest-side, color-mix(in srgb, var(--c3) 30%, transparent), transparent); animation: fx-fog 60s ease-in-out -35s infinite alternate; }
+@keyframes fx-fog { from { transform: translateX(-12cqw) scale(1); } to { transform: translateX(42cqw) scale(1.2); } }
+
+/* Ondas: anillos de luz que se expanden desde el centro */
+.fx-ondas .o { left: 50%; top: 52%; width: 26cqmin; height: 26cqmin; margin: -13cqmin 0 0 -13cqmin; border-radius: 50%; border: .45cqmin solid color-mix(in srgb, var(--c1) 85%, transparent); box-shadow: 0 0 2.4cqmin color-mix(in srgb, var(--c1) 55%, transparent), inset 0 0 2.4cqmin color-mix(in srgb, var(--c1) 40%, transparent); opacity: 0; animation: fx-ripple 12s linear infinite; }
+.fx-ondas .o2 { animation-delay: -3s; } .fx-ondas .o3 { animation-delay: -6s; } .fx-ondas .o4 { animation-delay: -9s; }
+@keyframes fx-ripple { 0% { transform: scale(.15); opacity: 0; } 8% { opacity: .9; } 100% { transform: scale(6.5); opacity: 0; } }
+
+/* Olas: dos capas de olas de luz abajo, el resto negro */
+.fx-olas .wv { left: 0; right: 0; bottom: 0; height: 34cqh; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 92%); mask-image: linear-gradient(to bottom, #000 0%, transparent 92%); }   /* se funden con el negro hacia abajo */
+.fx-olas .wv .w { position: absolute; left: 0; bottom: 0; width: 200%; height: 100%; display: block; }
+.fx-olas .wv1 .w { fill: color-mix(in srgb, var(--c1) 70%, transparent); animation: fx-wave 20s linear infinite; }
+.fx-olas .wv2 { height: 27cqh; }
+.fx-olas .wv2 .w { fill: color-mix(in srgb, var(--c2) 50%, transparent); animation: fx-wave 30s linear infinite reverse; }
+@keyframes fx-wave { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* Horizonte: una línea de luz con su resplandor */
+.fx-horizonte .hl { left: 6%; right: 6%; top: 68%; height: .4cqmin; background: linear-gradient(90deg, transparent, var(--c1) 30%, #fff 50%, var(--c1) 70%, transparent); box-shadow: 0 0 3cqmin .8cqmin color-mix(in srgb, var(--c1) 65%, transparent); animation: fx-pulse 7s ease-in-out infinite; }
+.fx-horizonte .hg { left: 4%; right: 4%; top: 36%; height: 33%; background: radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--c1) 50%, transparent), transparent 70%); animation: fx-pulse 7s ease-in-out infinite; }
+.fx-horizonte .hr { left: 0; right: 0; top: 68.5%; height: 31.5%; background: linear-gradient(to bottom, color-mix(in srgb, var(--c3) 26%, transparent), transparent 85%); animation: fx-pulse 7s ease-in-out -2s infinite; }
+@keyframes fx-pulse { 0%, 100% { opacity: .65; } 50% { opacity: 1; } }
+
+/* Bordes de luz: un halo de colores que gira alrededor de los bordes */
+.fx-bordes .ering { inset: 0; -webkit-mask-image: radial-gradient(ellipse at center, transparent 52%, #000 100%); mask-image: radial-gradient(ellipse at center, transparent 52%, #000 100%); }
+.fx-bordes .ering i { left: 50%; top: 50%; width: 250cqmax; height: 250cqmax; margin: -125cqmax 0 0 -125cqmax; opacity: .72; background: conic-gradient(from 0deg, transparent 0%, var(--c1) 11%, transparent 28%, var(--c2) 50%, transparent 68%, var(--c3) 86%, transparent 100%); animation: fx-spin 26s linear infinite; }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+
+/* Galería de fondos animados (pestaña Ajustes) */
+.pj-fxgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin: 8px 0; }
+.pj-fxbtn { display: flex; flex-direction: column; padding: 0; border: 2px solid var(--line-2); border-radius: 10px; background: #000; color: var(--fg); overflow: hidden; text-align: left; cursor: pointer; }
+.pj-fxbtn.on { border-color: var(--fg); box-shadow: 0 0 0 1px var(--fg); }
+.pj-fxbtn .pj-fxthumb { width: 100%; }
+.pj-fxname { font-size: 11px; font-weight: 600; padding: 4px 6px; background: var(--s1); }
